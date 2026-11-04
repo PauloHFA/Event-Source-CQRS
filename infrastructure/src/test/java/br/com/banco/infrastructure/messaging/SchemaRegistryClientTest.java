@@ -10,6 +10,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.Base64;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,14 +42,17 @@ class SchemaRegistryClientTest {
         });
         server.start();
 
+        String username = "registry-user";
+        String password = UUID.randomUUID().toString();
         var client = new SchemaRegistryClient(
                 URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
-                HttpClient.newHttpClient(), new ObjectMapper(), "registry-user", "secret");
+                HttpClient.newHttpClient(), new ObjectMapper(), username, password);
 
         assertThat(client.registerJsonSchema("banco.conta.eventos.v1-value", IntegrationEventSchema.V1))
                 .isEqualTo(42);
         assertThat(requestPath.get()).isEqualTo("/subjects/banco.conta.eventos.v1-value/versions");
-        assertThat(authorization.get()).isEqualTo("Basic cmVnaXN0cnktdXNlcjpzZWNyZXQ=");
+        assertThat(authorization.get()).isEqualTo("Basic " + Base64.getEncoder().encodeToString(
+                (username + ":" + password).getBytes(StandardCharsets.UTF_8)));
         assertThat(new ObjectMapper().readTree(body.get()).path("schemaType").asText()).isEqualTo("JSON");
     }
 }

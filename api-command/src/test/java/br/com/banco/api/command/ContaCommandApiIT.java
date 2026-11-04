@@ -15,6 +15,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
+import java.util.Base64;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,6 +32,7 @@ class ContaCommandApiIT {
         r.add("spring.datasource.url", PG::getJdbcUrl);
         r.add("spring.datasource.username", PG::getUsername);
         r.add("spring.datasource.password", PG::getPassword);
+        r.add("banco.crypto.master-key", () -> Base64.getEncoder().encodeToString(new byte[32]));
     }
 
     @Autowired TestRestTemplate rest;
@@ -87,5 +90,33 @@ class ContaCommandApiIT {
 
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
-}
 
+    @Test
+    void correlationIdEPropagadoAoEventoEResposta() throws Exception {
+        UUID correlationId = UUID.randomUUID();
+        var headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Correlation-Id", correlationId.toString());
+
+        var response = rest.postForEntity("/contas",
+                new HttpEntity<>(Map.of("titularRef", "t-corr", "limite", "0"), headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getHeaders().getFirst("X-Correlation-Id")).isEqualTo(correlationId.toString());
+        String accountId = mapper.readTree(response.getBody()).get("contaId").asText();
+        String storedCorrelationId = jdbc.queryForObject(
+                "SELECT metadata->>'correlationId' FROM events WHERE stream_id = ?",
+                String.class, "conta-" + accountId);
+        assertThat(storedCorrelationId).isEqualTo(correlationId.toString());
+    }
+
+    @Test
+    void geraCorrelationIdQuandoClienteNaoEnvia() {
+        var response = post("/contas", Map.of("titularRef", "t-auto", "limite", "0"), null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String header = response.getHeaders().getFirst("X-Correlation-Id");
+        assertThat(header).isNotBlank();
+        assertThat(UUID.fromString(header).toString()).isEqualTo(header);
+    }
+}

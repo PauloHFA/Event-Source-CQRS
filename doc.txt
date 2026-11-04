@@ -828,5 +828,51 @@ domínio).
 Documentação do Axon Framework, EventStoreDB/Kurrent e PostgreSQL
 ( pg_current_snapshot , constraints).
 Chris Richardson, Microservices Patterns (Sagas e Transactional Outbox).
+
+20. Operação das fases 8 e 9
+
+20.1 Chave de dados pessoais
+O serviço exige BANCO_CRYPTO_MASTER_KEY: chave AES-256 codificada em Base64,
+fornecida por um gerenciador de segredos fora do repositório. Não use uma chave
+de exemplo em produção. A ausência ou formato incorreto da chave impede a
+inicialização; perder a chave mestra torna ilegíveis as chaves de conta
+armazenadas. Planeje backup seguro e rotação por re-envelopamento antes da
+implantação.
+
+Eventos ContaAberta gravados após a ativação do recurso cifram titularRef com
+AES-GCM e uma chave por conta. Destruir essa chave impede a recuperação dos
+valores cifrados sem apagar os eventos financeiros. O histórico anterior à
+migração permanece em texto claro e não é protegido retroativamente; por isso,
+CA-13 não está integralmente satisfeito para dados legados até que exista um
+processo aprovado de migração. Backups e cópias anteriores também precisam ser
+considerados no procedimento de retenção. Snapshots não armazenam titularRef.
+
+20.2 Verificação da cadeia
+JdbcEventIntegrityVerifier verifica a sequência de hashes por stream em uma
+transação repeatable-read e retorna a quantidade verificada e a primeira posição
+inválida. As posições anteriores à V5 são tratadas como limite de confiança:
+a migração cria o início da cadeia após o último evento existente. A cadeia
+detecta alterações e omissões em eventos protegidos, mas não é uma assinatura
+externa e não impede um administrador de banco de reescrever toda a cadeia.
+Execute a verificação por ferramenta administrativa protegida; ela não é
+exposta como endpoint HTTP público.
+
+20.3 Observabilidade e validação
+O endpoint de health e os endpoints metrics/prometheus do Actuator permitem
+verificar saúde, timers de lote, eventos processados, lotes com falha e lag de
+projeção/publicador quando esses componentes executam. Configure
+OTEL_EXPORTER_OTLP_ENDPOINT para um coletor OpenTelemetry; o sampling padrão é
+10% e pode ser alterado por TRACING_SAMPLING_PROBABILITY. X-Correlation-Id é
+gerado quando ausente, validado como UUID, devolvido na resposta, incluído nos
+logs JSON, metadados de eventos e observação distribuída. Restrinja os endpoints
+de métricas e health pela rede/ingress; não os publique sem controles de acesso.
+
+Validação local sem banco/container: mvn -pl infrastructure -am test e
+mvn -pl api-command -am test. Os testes *IT que validam PostgreSQL, migrations,
+carga concorrente, imutabilidade e falha do publisher requerem Docker e devem
+ser executados com mvn -pl infrastructure -am verify e
+mvn -pl api-command -am verify. As metas de latência, throughput e lag devem
+ser medidas em ambiente representativo; os testes de resiliência existentes
+não constituem evidência de que RNF-03 a RNF-06 foram atingidos.
 Event Sourcing + CQRS em Java – Sistema Bancário
 Page 24 of 24
