@@ -499,6 +499,23 @@ Publique eventos de integração (contrato estável e enxuto), não exponha dire
 o formato interno dos eventos de domínio para outros contextos.
 Esquemas versionados em Schema Registry (Avro/JSON Schema) com
 compatibilidade retroativa.
+
+Implementação da fase 7: o publisher lê o Event Store em lotes, usa a chave
+streamId no Kafka e registra o envelope JSON Schema v1 no subject
+<topico>-value. O valor usa o wire format Confluent (magic byte + schema ID +
+JSON). O checkpoint é atualizado na mesma transação PostgreSQL somente depois
+dos acknowledgements do Kafka; uma falha pode causar reenvio, portanto a
+entrega é at-least-once e consumidores devem deduplicar por eventId.
+
+Para habilitar o publisher na API, configure banco.messaging.enabled=true,
+banco.messaging.bootstrap-servers (padrão localhost:9092) e
+banco.messaging.schema-registry-url (padrão http://localhost:8081). Credenciais
+opcionais: banco.messaging.schema-registry-username/password. O Registry deve
+usar compatibilidade BACKWARD para os subjects publicados. O intervalo de
+polling (1000 ms) e o lote (100 eventos) podem ser ajustados com
+banco.messaging.poll-interval e banco.messaging.batch-size. Desabilitado por
+padrão para manter a API utilizável sem Kafka/Schema Registry.
+
 10. Evolução de Eventos (Upcasting)
 Eventos gravados jamais são editados. Quando o formato muda:
 public class ValorDepositadoV1ToV2 implements Upcaster {
