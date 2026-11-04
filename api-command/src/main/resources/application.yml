@@ -7,4 +7,27 @@ spring:
     password: ${DB_PASSWORD:banco}
   flyway:
     enabled: true
-
+banco:
+  crypto:
+    master-key: ${BANCO_CRYPTO_MASTER_KEY:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        projection.batch.duration: true
+        integration.publisher.batch.duration: true

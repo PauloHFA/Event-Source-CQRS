@@ -5,6 +5,7 @@ import br.com.banco.infrastructure.messaging.IntegrationEventMapper;
 import br.com.banco.infrastructure.messaging.IntegrationEventPublisherRunner;
 import br.com.banco.infrastructure.messaging.KafkaIntegrationEventPublisher;
 import br.com.banco.infrastructure.messaging.SchemaRegistryClient;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -50,8 +51,9 @@ public class IntegrationPublisherConfiguration {
     IntegrationEventPublisherRunner integrationEventPublisherRunner(
             JdbcTemplate jdbc, TransactionTemplate tx, JdbcEventStore eventStore,
             IntegrationEventMapper mapper, KafkaIntegrationEventPublisher publisher,
+            MeterRegistry meters,
             @Value("${banco.messaging.batch-size:100}") int batchSize) {
-        return new IntegrationEventPublisherRunner(jdbc, tx, eventStore, mapper, publisher, batchSize);
+        return new IntegrationEventPublisherRunner(jdbc, tx, eventStore, mapper, publisher, batchSize, meters);
     }
 
     @Bean

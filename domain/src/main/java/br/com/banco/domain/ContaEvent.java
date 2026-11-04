@@ -10,7 +10,12 @@ public sealed interface ContaEvent extends DomainEvent {
 
     /** titularRef é uma referência (id), nunca nome/CPF (LGPD). */
     record ContaAberta(UUID eventId, UUID contaId, String titularRef,
-                       BigDecimal limite, Instant em) implements ContaEvent {}
+                       BigDecimal limite, Instant em) implements ContaEvent {
+        @Override
+        public int schemaVersion() {
+            return 2;
+        }
+    }
 
     record ValorDepositado(UUID eventId, UUID contaId, BigDecimal valor,
                            String origem, Instant em) implements ContaEvent {}
@@ -29,4 +34,3 @@ public sealed interface ContaEvent extends DomainEvent {
     record ValorEstornado(UUID eventId, UUID contaId, BigDecimal valor, UUID transferenciaId,
                           Instant em) implements ContaEvent {}
 }
-

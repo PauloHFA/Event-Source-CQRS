@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -41,6 +42,7 @@ class JdbcEventStoreIT {
     static HikariDataSource ds;
     static JdbcTemplate jdbc;
     static JdbcEventStore store;
+    static JdbcEventIntegrityVerifier integrityVerifier;
     final Clock clock = Clock.systemUTC();
     final EventMetadata meta = EventMetadata.of(UUID.randomUUID(), "teste");
 
@@ -56,6 +58,7 @@ class JdbcEventStoreIT {
         jdbc = new JdbcTemplate(ds);
         store = new JdbcEventStore(jdbc, new TransactionTemplate(new DataSourceTransactionManager(ds)),
                 new EventSerializer());
+        integrityVerifier = new JdbcEventIntegrityVerifier(jdbc);
     }
 
     @AfterAll
@@ -80,6 +83,26 @@ class JdbcEventStoreIT {
         assertThat(stream.version()).isEqualTo(2);
         assertThat(stream.events()).hasSize(2);
         assertThat(Conta.reconstruir(stream.events()).saldo()).isEqualByComparingTo("100.00");
+        assertThat(integrityVerifier.verify().valid()).isTrue();
+    }
+
+    @Test
+    void cadeiaVerificaMultiplosStreamsERejeitaMutacao() {
+        UUID firstId = abrirContaComSaldo("100");
+        UUID secondId = abrirContaComSaldo("50");
+
+        IntegrityVerification verification = integrityVerifier.verify();
+
+        assertThat(verification.valid()).isTrue();
+        assertThat(verification.verifiedEvents()).isGreaterThanOrEqualTo(4);
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE event_integrity_chain SET event_hash = ? WHERE global_position = (
+                    SELECT MIN(global_position) FROM events WHERE stream_id = ?
+                )
+                """, new byte[32], JdbcEventStore.contaStreamId(firstId)))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("append-only");
+        assertThat(store.load(JdbcEventStore.contaStreamId(secondId)).events()).hasSize(2);
     }
 
     @Test
@@ -158,4 +181,3 @@ class JdbcEventStoreIT {
         assertThat(sacados).isEqualTo(1);
     }
 }
-

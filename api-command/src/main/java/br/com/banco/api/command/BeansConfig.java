@@ -12,8 +12,12 @@ import br.com.banco.application.port.IdempotencyStore;
 import br.com.banco.application.port.UnitOfWork;
 import br.com.banco.infrastructure.eventstore.EventSerializer;
 import br.com.banco.infrastructure.eventstore.JdbcEventStore;
+import br.com.banco.infrastructure.eventstore.JdbcEventIntegrityVerifier;
 import br.com.banco.infrastructure.idempotency.JdbcIdempotencyStore;
 import br.com.banco.infrastructure.idempotency.TransactionalUnitOfWork;
+import br.com.banco.infrastructure.privacy.AesGcmPersonalDataCipher;
+import br.com.banco.infrastructure.privacy.CryptoShreddingService;
+import br.com.banco.infrastructure.privacy.JdbcPersonalDataKeyStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,13 +34,35 @@ public class BeansConfig {
     }
 
     @Bean
-    EventSerializer eventSerializer() {
-        return new EventSerializer();
+    JdbcPersonalDataKeyStore personalDataKeyStore(
+            JdbcTemplate jdbc, @Value("${banco.crypto.master-key:}") String masterKey) {
+        return new JdbcPersonalDataKeyStore(jdbc, masterKey);
+    }
+
+    @Bean
+    AesGcmPersonalDataCipher personalDataCipher(JdbcPersonalDataKeyStore keys) {
+        return new AesGcmPersonalDataCipher(keys);
+    }
+
+    @Bean
+    EventSerializer eventSerializer(AesGcmPersonalDataCipher cipher) {
+        return new EventSerializer(cipher);
+    }
+
+    @Bean
+    CryptoShreddingService cryptoShreddingService(
+            AesGcmPersonalDataCipher cipher, TransactionTemplate tx) {
+        return new CryptoShreddingService(cipher, tx);
     }
 
     @Bean
     JdbcEventStore eventStore(JdbcTemplate jdbc, TransactionTemplate tx, EventSerializer serializer) {
         return new JdbcEventStore(jdbc, tx, serializer);
+    }
+
+    @Bean
+    JdbcEventIntegrityVerifier eventIntegrityVerifier(JdbcTemplate jdbc) {
+        return new JdbcEventIntegrityVerifier(jdbc);
     }
 
     @Bean
@@ -88,4 +114,3 @@ public class BeansConfig {
         return new ContaHistoricoService(store);
     }
 }
-
