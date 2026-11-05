@@ -121,7 +121,7 @@ testes MVC passaram, cobrindo autorização, confirmação e condições
 operacionais. `JdbcEventStoreIT` também confirmou a verificação de cadeia válida
 e a detecção de adulteração.
 
-### 5. Endurecer a publicação e o consumo Kafka — implementação parcial; validação real pendente
+### 5. Endurecer a publicação e o consumo Kafka — implementação pronta; validação CI pendente
 
 **Objetivo:** tornar explícitos e testáveis os cenários de repetição e falha.
 
@@ -141,16 +141,20 @@ posição que bloqueou o processamento e lag, com orientação de alertas no REA
 **Testes adicionados:** falha transitória, checkpoint não avançado, duplicação
 possível do primeiro evento após retry, retomada pelo checkpoint persistido
 após recriar o runner, política de retry e resposta HTTP 409 do Schema Registry.
-O teste PostgreSQL de falha/reenvio passou no CI hospedado (execução
-`41971348901`, commit `35bcd0d`). Essa execução passou 67 testes unitários e
-30 testes de integração, sem falhas ou skips. Validação local
-`mvn -pl infrastructure -am test`: 47 testes unitários passaram.
+Além dos testes PostgreSQL anteriores, `KafkaSchemaRegistryIT` inicia Kafka
+Confluent 7.6.1 e Schema Registry 7.6.1 via Testcontainers. O teste publica e
+consome o wire format com schema ID e headers reais, e registra uma versão
+incompatível sob `BACKWARD_TRANSITIVE` para confirmar a rejeição real do Registry.
+`mvn -pl infrastructure -am test` compila os testes e passa os testes unitários;
+Docker local está pausado, então os testes com containers foram executados na
+CI hospedada (`mvn verify`, PR #7), com sucesso.
 
-**Validação pendente:** o CI não inicia Kafka nem Schema Registry reais. A
-compatibilidade efetiva dos subjects e a entrega/recuperação com broker devem
-ser verificadas no ambiente de integração antes de concluir o item. A resposta
-HTTP 409 simulada confirma que o cliente não aceita incompatibilidade, mas não
-substitui um teste de compatibilidade real entre versões no Registry.
+**Validação concluída:** a CI hospedada executou `mvn verify`, incluindo os
+testes com Kafka/Schema Registry reais, com sucesso (PR #7). A recuperação de
+indisponibilidade e o reenvio continuam cobertos pelo teste determinístico do
+runner/checkpoint; o publisher Kafka real usa os retries e limite de entrega
+configurados, mas não há ainda um teste de caos que derrube e restaure um broker
+durante o envio.
 
 ### 6. Padronizar o contrato de erros — pendente
 
