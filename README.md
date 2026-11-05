@@ -392,11 +392,31 @@ PostgreSQL e podem apresentar atraso em relação aos comandos.
 
 ### Erros
 
-As respostas seguem o formato `ProblemDetail` do Spring:
+Erros de domínio, validação, concorrência e persistência tratados pela API
+seguem o formato `ProblemDetail` do Spring com `code`, um identificador estável
+para clientes. Não use `detail` para lógica de cliente, pois a mensagem pode
+mudar:
 
-- `400 Bad Request`: formato ou validação inválida;
-- `409 Conflict`: conta já existente ou conflito de concorrência persistente;
-- `422 Unprocessable Entity`: regra de negócio rejeitou o comando.
+- `400 Bad Request`: `VALOR_INVALIDO`, `REQUEST_INVALIDO` ou
+  `PARAMETRO_INVALIDO`;
+- `409 Conflict`: `CONTA_JA_EXISTE` ou `CONFLITO_DE_CONCORRENCIA`;
+- `422 Unprocessable Entity`: `SALDO_INSUFICIENTE`, `CONTA_BLOQUEADA`,
+  `CONTA_INVALIDA`, `SALDO_NAO_ZERADO`, `TRANSFERENCIA_ESTADO_INVALIDO`,
+  `TRANSFERENCIA_MESMA_CONTA` ou o fallback `REGRA_DE_NEGOCIO_VIOLADA`;
+- `500 Internal Server Error`: `ERRO_PERSISTENCIA`, sem detalhes internos da
+  falha de banco na resposta.
+
+Exemplo:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Unprocessable Entity",
+  "status": 422,
+  "detail": "Saldo insuficiente na conta ...",
+  "code": "SALDO_INSUFICIENTE"
+}
+```
 
 ## Eventos de integração
 
@@ -536,9 +556,10 @@ mvn verify
 
 `mvn verify` é o comando canônico do CI. O workflow do GitHub Actions executa-o
 em cada pull request para `main`, em cada push para `main` e manualmente por
-`workflow_dispatch`. O runner Ubuntu fornece Docker para os testes PostgreSQL
-via Testcontainers; os relatórios Surefire e Failsafe são publicados como
-artefato, inclusive quando a execução falha. Veja o
+`workflow_dispatch`. O runner Ubuntu fornece Docker para os testes de
+PostgreSQL, Kafka e Schema Registry via Testcontainers; os relatórios
+Surefire/Failsafe são publicados como artefato, inclusive quando a execução
+falha. Veja o
 [workflow de CI](./.github/workflows/ci.yml).
 
 O Maven precisa estar instalado localmente. Os testes `*IT` usam PostgreSQL,
@@ -553,9 +574,10 @@ em Kafka real e verifica compatibilidade no Schema Registry real.
 Ainda não há benchmark automatizado ou teste de caos que demonstre as metas
 documentadas de p95, lag, throughput ou rebuild de 10.000 eventos. Elas devem
 ser medidas em ambiente representativo antes de serem declaradas atendidas.
-O CI também não inicia um broker Kafka/Schema Registry real; a falha/repetição
-é testada com um publisher controlado, e a compatibilidade efetiva dos subjects
-deve ser validada no ambiente que hospeda o Registry.
+O teste de runner recriado valida a retomada do checkpoint persistido; ainda
+não há teste de caos que derrube e restaure um broker durante o envio.
+Os testes também cobrem códigos de erro `ProblemDetail` e a atualização
+periódica do read model.
 
 ## Limitações e próximos passos
 

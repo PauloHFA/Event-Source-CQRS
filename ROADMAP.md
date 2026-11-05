@@ -36,7 +36,7 @@ passaram no CI hospedado (execução `41962134754`, commit `b48c5be`): os sete
 testes de `ContaCommandApiIT` passaram, incluindo token ausente, identidade
 derivada do token, rejeição de acesso a outra conta e idempotência.
 
-### 2. Completar o lado de consultas do CQRS — implementação pronta; automação e retomada pendentes
+### 2. Completar o lado de consultas do CQRS — validação de retomada e agendamento em andamento
 
 **Objetivo:** tornar os read models utilizáveis pela aplicação.
 
@@ -58,8 +58,9 @@ autenticadas de saldo/extrato e paginação limitada com ordenação estável. T
 de controller e PostgreSQL foram adicionados. No CI hospedado (execução
 `41962134754`, commit `b48c5be`), `ProjectionIT` passou com seis testes,
 cobrindo consultas SQL, paginação estável, idempotência, reconstrução e
-concorrência. A execução agendada e a retomada após reinício ainda não têm
-validação de integração específica e permanecem pendentes.
+concorrência. Nesta etapa foram adicionados testes para confirmar que a projeção
+agendada atualiza o read model sem acionamento manual e que um runner recém-criado
+retoma do checkpoint persistido.
 
 ### 3. Tornar os testes de integração reproduzíveis no CI — concluída
 
@@ -75,10 +76,8 @@ em ambiente automatizado.
 
 **Implementação:** `.github/workflows/ci.yml` executa `mvn verify` com Java 21
 em pull requests para `main`, pushes para `main` e execução manual. O runner
-Ubuntu usa Docker para PostgreSQL Testcontainers; Surefire/Failsafe reports são
-publicados mesmo em caso de falha. Não há serviço Kafka no pipeline: o teste de
-publisher usa um double determinístico, enquanto o broker real fica para a
-etapa 5.
+Ubuntu usa Docker para PostgreSQL, Kafka e Schema Registry via Testcontainers;
+Surefire/Failsafe reports são publicados mesmo em caso de falha.
 
 **Validação:** a execução `41962134754` do GitHub Actions concluiu `mvn verify`
 com sucesso no Java 21. Passaram 64 testes unitários, 23 testes de integração
@@ -121,7 +120,7 @@ testes MVC passaram, cobrindo autorização, confirmação e condições
 operacionais. `JdbcEventStoreIT` também confirmou a verificação de cadeia válida
 e a detecção de adulteração.
 
-### 5. Endurecer a publicação e o consumo Kafka — implementação pronta; validação CI pendente
+### 5. Endurecer a publicação e o consumo Kafka — implementação e validação CI concluídas
 
 **Objetivo:** tornar explícitos e testáveis os cenários de repetição e falha.
 
@@ -156,7 +155,7 @@ runner/checkpoint; o publisher Kafka real usa os retries e limite de entrega
 configurados, mas não há ainda um teste de caos que derrube e restaure um broker
 durante o envio.
 
-### 6. Padronizar o contrato de erros — pendente
+### 6. Padronizar o contrato de erros — implementação pronta; validação CI pendente
 
 **Objetivo:** não acoplar clientes a mensagens de exceção do domínio.
 
@@ -165,6 +164,11 @@ durante o envio.
 - Mapear erros de validação, regra de negócio, concorrência e infraestrutura
   para respostas HTTP consistentes.
 - Testar status, código e formato das respostas públicas.
+
+**Implementação:** respostas `ProblemDetail` incluem `code` estável para
+validação, regras de domínio, conflito de concorrência e persistência. Falhas de
+banco são registradas no servidor e retornam detalhe genérico ao cliente. Testes
+unitários verificam códigos/status e a integração verifica o formato HTTP real.
 
 ### 7. Medir desempenho e preparar operação — pendente
 

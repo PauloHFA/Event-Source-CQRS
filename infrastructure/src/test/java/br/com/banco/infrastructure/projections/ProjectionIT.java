@@ -180,6 +180,25 @@ class ProjectionIT {
     }
 
     @Test
+    void runnerRecriadoRetomaDoCheckpointPersistido() {
+        runner.runUntilCaughtUp();
+        UUID id = abrirConta("0");
+        operar(id, c -> c.depositar(new BigDecimal("20.00"), "X", clock));
+
+        ProjectionRunner antesDoReinicio = new ProjectionRunner(jdbc, tx, store, projector, 1);
+        assertThat(antesDoReinicio.runOnce()).isEqualTo(1);
+        long checkpointPersistido = antesDoReinicio.checkpoint();
+
+        ProjectionRunner aposReinicio = new ProjectionRunner(jdbc, tx, store, projector, 200);
+        assertThat(aposReinicio.checkpoint()).isEqualTo(checkpointPersistido);
+        assertThat(aposReinicio.runUntilCaughtUp()).isPositive();
+
+        assertThat(saldoRm(id)).isEqualByComparingTo("20.00");
+        assertThat(aposReinicio.checkpoint()).isEqualTo(
+                jdbc.queryForObject("SELECT max(global_position) FROM events", Long.class));
+    }
+
+    @Test
     void CA14_milEventosConcorrentesNenhumEventoEhPulado() throws Exception {
         int threads = 20, contasPorThread = 5, depositosPorConta = 10; // 1.000 eventos ValorDepositado
         List<UUID> contas = new ArrayList<>();
