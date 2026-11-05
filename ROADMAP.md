@@ -7,7 +7,7 @@ cada entrega.
 
 ## Ordem de implementação
 
-### 1. Autenticação e autorização da API — validação de integração pendente
+### 1. Autenticação e autorização da API — validada
 
 **Objetivo:** deixar de tratar `X-User-Id` enviado pelo cliente como identidade.
 
@@ -31,10 +31,12 @@ será obrigatório na execução. O vínculo usa o `titularRef` do evento de abe
 
 **Implementação:** validação JWT stateless, autorização por titular nas rotas de
 conta/histórico/transferência, identidade obtida do `sub` e chaves idempotentes
-escopadas por usuário e operação. A suíte unitária passou; falta executar os
-testes HTTP com PostgreSQL via Testcontainers em um ambiente Docker funcional.
+escopadas por usuário e operação. Os testes HTTP com PostgreSQL via Testcontainers
+passaram no CI hospedado (execução `41962134754`, commit `b48c5be`): os sete
+testes de `ContaCommandApiIT` passaram, incluindo token ausente, identidade
+derivada do token, rejeição de acesso a outra conta e idempotência.
 
-### 2. Completar o lado de consultas do CQRS — em implementação
+### 2. Completar o lado de consultas do CQRS — implementação pronta; automação e retomada pendentes
 
 **Objetivo:** tornar os read models utilizáveis pela aplicação.
 
@@ -51,12 +53,15 @@ testes HTTP com PostgreSQL via Testcontainers em um ambiente Docker funcional.
 - Endpoints retornam os dados projetados e não leem o Event Store como atalho.
 - Testes verificam paginação, retomada, idempotência e consistência eventual.
 
-**Implementação iniciada:** runner agendado e configurável, consultas
+**Implementação:** runner agendado e configurável, consultas
 autenticadas de saldo/extrato e paginação limitada com ordenação estável. Testes
-de controller foram adicionados; faltam validar as consultas SQL e execução
-automática/reinício contra PostgreSQL em ambiente com Docker funcional.
+de controller e PostgreSQL foram adicionados. No CI hospedado (execução
+`41962134754`, commit `b48c5be`), `ProjectionIT` passou com seis testes,
+cobrindo consultas SQL, paginação estável, idempotência, reconstrução e
+concorrência. A execução agendada e a retomada após reinício ainda não têm
+validação de integração específica e permanecem pendentes.
 
-### 3. Tornar os testes de integração reproduzíveis no CI — implementação pronta; primeira execução pendente
+### 3. Tornar os testes de integração reproduzíveis no CI — concluída
 
 **Objetivo:** validar o comportamento com PostgreSQL e, quando aplicável, Kafka
 em ambiente automatizado.
@@ -75,13 +80,13 @@ publicados mesmo em caso de falha. Não há serviço Kafka no pipeline: o teste 
 publisher usa um double determinístico, enquanto o broker real fica para a
 etapa 5.
 
-**Validação pendente:** os testes unitários passaram localmente. A execução
-local de `mvn -pl api-command -am verify` falhou porque Testcontainers não
-reconheceu um ambiente Docker válido; `docker info` respondeu com sucesso, mas
-isso não bastou para o runtime Java. A primeira execução no GitHub Actions ainda
-precisa confirmar o ambiente hospedado e todos os testes de integração.
+**Validação:** a execução `41962134754` do GitHub Actions concluiu `mvn verify`
+com sucesso no Java 21. Passaram 64 testes unitários, 23 testes de integração
+da infraestrutura e 7 testes de integração da API, todos sem falhas ou skips.
+O ambiente hospedado executou os testes PostgreSQL com Testcontainers; os
+relatórios Surefire/Failsafe foram publicados.
 
-### 4. Operacionalizar privacidade e integridade — implementação com validação de integração pendente
+### 4. Operacionalizar privacidade e integridade — validada
 
 **Objetivo:** transformar os serviços internos existentes em procedimentos
 controlados e auditáveis.
@@ -108,17 +113,13 @@ precisa ser mantida enquanto existirem backups que a exijam. Crypto-shredding
 não remove referências `userId` já gravadas em metadados históricos, nem apaga
 backups ou exportações, então não equivale a anonimização completa.
 
-**Validação pendente:** testes MVC cobrem autorização, confirmação, janela de
-manutenção e chave destino; testes PostgreSQL cobrem shredding/auditoria,
-rollback e rotação/reproteção. Os 64 testes unitários/MVC passam. A execução
-de `mvn -pl api-command -am verify` termina com código 1 porque Testcontainers não
-reconhece o endpoint Docker, mesmo com `docker info` bem-sucedido e `DOCKER_HOST`
-definido explicitamente. A falha também ocorre no teste PostgreSQL isolado,
-com cada named pipe do Docker Desktop e sem a configuração global
-`~/.testcontainers.properties`; o CLI consegue acessar ambos os pipes. Assim,
-os seis testes de integração ficam bloqueados antes de executar, sem evidência
-de falha funcional da aplicação. Confirmar a suíte completa no CI hospedado ou
-em um ambiente Linux com Docker funcional antes de concluir esta etapa.
+**Validação:** concluída na execução `41962134754` do GitHub Actions, commit
+`b48c5be`. Os três testes PostgreSQL de `PersonalDataKeyOperationsIT` passaram,
+cobrindo crypto-shredding com auditoria, rejeição de solicitações inválidas sem
+perda de acesso aos dados e rotação/reproteção legível com a nova chave. Os
+testes MVC passaram, cobrindo autorização, confirmação e condições
+operacionais. `JdbcEventStoreIT` também confirmou a verificação de cadeia válida
+e a detecção de adulteração.
 
 ### 5. Endurecer a publicação e o consumo Kafka — pendente
 
