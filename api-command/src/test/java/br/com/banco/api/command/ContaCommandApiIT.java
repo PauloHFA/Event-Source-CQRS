@@ -6,17 +6,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.test.context.BootstrapWith;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.ContextConfiguration;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -32,20 +29,9 @@ import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-@BootstrapWith(org.springframework.boot.test.context.SpringBootTestContextBootstrapper.class)
 @SpringBootTest(classes = CommandApiApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = CommandApiApplication.class)
-class ContaCommandApiIT {
-
-    static {
-        System.out.println("Test class loader: " + ContaCommandApiIT.class.getClassLoader());
-        System.out.println("BootstrapWith loader: " + BootstrapWith.class.getClassLoader());
-        System.out.println("Declared BootstrapWith: "
-                + ContaCommandApiIT.class.getDeclaredAnnotation(BootstrapWith.class));
-        System.out.println("Merged BootstrapWith: "
-                + AnnotatedElementUtils.findMergedAnnotation(ContaCommandApiIT.class, BootstrapWith.class));
-    }
+public class ContaCommandApiIT {
 
     @Container
     static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>("postgres:16-alpine");
