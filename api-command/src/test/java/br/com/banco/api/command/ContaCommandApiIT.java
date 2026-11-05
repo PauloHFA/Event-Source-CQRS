@@ -16,6 +16,7 @@ import org.springframework.test.context.BootstrapWith;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.ContextConfiguration;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @BootstrapWith(org.springframework.boot.test.context.SpringBootTestContextBootstrapper.class)
 @SpringBootTest(classes = CommandApiApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ContextConfiguration(classes = CommandApiApplication.class)
 class ContaCommandApiIT {
 
     static {
