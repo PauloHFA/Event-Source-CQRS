@@ -121,7 +121,7 @@ testes MVC passaram, cobrindo autorização, confirmação e condições
 operacionais. `JdbcEventStoreIT` também confirmou a verificação de cadeia válida
 e a detecção de adulteração.
 
-### 5. Endurecer a publicação e o consumo Kafka — pendente
+### 5. Endurecer a publicação e o consumo Kafka — implementação parcial; validação real pendente
 
 **Objetivo:** tornar explícitos e testáveis os cenários de repetição e falha.
 
@@ -130,6 +130,24 @@ e a detecção de adulteração.
 - Confirmar avanço seguro do checkpoint e documentar a entrega ao menos uma vez.
 - Definir deduplicação pelo `eventId` no contrato de consumidores.
 - Testar indisponibilidade, reinício, reenvio e compatibilidade de schema.
+
+**Implementação:** retries Kafka com `acks=all`, idempotência e limite de
+entrega de 120 segundos; falha de lote mantém o checkpoint e a próxima tentativa
+ocorre no ciclo agendado seguinte. O `eventId` estável no envelope/header é a
+chave de deduplicação documentada para consumers; eventos sem mapeamento falham
+sem descarte e deixam o checkpoint bloqueado. Métricas expõem lotes falhos,
+posição que bloqueou o processamento e lag, com orientação de alertas no README.
+
+**Testes adicionados:** falha transitória, checkpoint não avançado, duplicação
+possível do primeiro evento após retry, retomada pelo checkpoint persistido
+após recriar o runner, política de retry e resposta HTTP 409 do Schema Registry.
+O teste PostgreSQL de falha/reenvio está no conjunto `*IT` e aguarda execução no
+CI. Validação local `mvn -pl infrastructure -am test`: 47 testes unitários
+passaram; todos os testes, inclusive o `*IT`, foram compilados.
+
+**Validação pendente:** o CI não inicia Kafka nem Schema Registry reais. A
+compatibilidade efetiva dos subjects e a entrega/recuperação com broker devem
+ser verificadas no ambiente de integração antes de concluir o item.
 
 ### 6. Padronizar o contrato de erros — pendente
 

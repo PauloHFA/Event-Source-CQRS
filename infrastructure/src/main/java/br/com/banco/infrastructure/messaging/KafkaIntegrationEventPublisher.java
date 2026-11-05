@@ -32,6 +32,10 @@ public final class KafkaIntegrationEventPublisher implements IntegrationEventPub
     public KafkaIntegrationEventPublisher(String bootstrapServers, String clientId,
                                           SchemaRegistryClient schemaRegistry) {
         this.schemaRegistry = schemaRegistry;
+        this.producer = new KafkaProducer<>(producerProperties(bootstrapServers, clientId));
+    }
+
+    static Properties producerProperties(String bootstrapServers, String clientId) {
         Properties properties = new Properties();
         properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         properties.put(ProducerConfig.CLIENT_ID_CONFIG, clientId);
@@ -39,9 +43,12 @@ public final class KafkaIntegrationEventPublisher implements IntegrationEventPub
         properties.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         properties.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
         properties.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+        properties.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30_000);
+        properties.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120_000);
+        properties.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, 100);
         properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
-        this.producer = new KafkaProducer<>(properties);
+        return properties;
     }
 
     @Override

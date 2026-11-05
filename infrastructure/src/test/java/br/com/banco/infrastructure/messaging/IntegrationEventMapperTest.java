@@ -1,6 +1,7 @@
 package br.com.banco.infrastructure.messaging;
 
 import br.com.banco.domain.ContaEvent;
+import br.com.banco.domain.DomainEvent;
 import br.com.banco.domain.TransferenciaEvent;
 import br.com.banco.infrastructure.eventstore.PublishableEvent;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class IntegrationEventMapperTest {
 
@@ -41,4 +43,17 @@ class IntegrationEventMapperTest {
 
         assertThat(mapper.map(published)).isEmpty();
     }
+
+    @Test
+    void tipoDeEventoDesconhecidoFalhaEmVezDeAvancarSilenciosamente() {
+        var event = new UnsupportedEvent(UUID.randomUUID(), Instant.parse("2026-01-01T00:00:00Z"));
+        var published = new PublishableEvent(3, "unknown-stream", 1, event, null, event.em());
+
+        assertThatThrownBy(() -> mapper.map(published))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(event.getClass().getName())
+                .hasMessageContaining(event.eventId().toString());
+    }
+
+    private record UnsupportedEvent(UUID eventId, Instant em) implements DomainEvent {}
 }

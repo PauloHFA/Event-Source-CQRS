@@ -25,7 +25,8 @@ public class IntegrationEventMapper {
         DomainEvent e = p.event();
         if (e instanceof ContaEvent c) return Optional.of(conta(p, c));
         if (e instanceof TransferenciaEvent t) return transferencia(p, t);
-        return Optional.empty();
+        throw new IllegalArgumentException("Tipo de evento sem mapeamento de integração: "
+                + e.getClass().getName() + " (" + e.eventId() + ").");
     }
 
     private Mapped conta(PublishableEvent p, ContaEvent c) {

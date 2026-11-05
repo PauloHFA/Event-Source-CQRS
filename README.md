@@ -131,8 +131,52 @@ recuperação deve ser configurada e monitorada no ambiente de execução.
 O publisher lê eventos confirmados do Event Store a partir de um checkpoint,
 converte apenas os eventos destinados ao contrato público e avança o checkpoint
 após a publicação. O publisher usa Kafka com `acks=all` e idempotência do
-produtor. Uma falha pode causar reenvio de mensagens do lote, portanto os
-consumidores devem ser idempotentes.
+produtor. O cliente tenta novamente durante até 120 segundos por entrega, com
+timeout de requisição de 30 segundos e backoff fixo de 100 ms. Se o broker ou
+o Schema Registry continuar indisponível, a execução agendada falha
+com log e métricas; uma nova tentativa ocorre no próximo ciclo configurado.
+
+O checkpoint PostgreSQL só avança depois que todos os eventos publicáveis do
+lote recebem confirmação. Como a transação do banco não pode ser atômica com a
+transação Kafka, uma falha pode reenviar mensagens que já foram confirmadas.
+Portanto, a garantia é **ao menos uma vez**, não exatamente uma vez. `eventId`
+é estável entre tentativas e está no envelope e no header Kafka; consumidores
+devem deduplicar por esse valor em uma inbox durável, na mesma transação do
+efeito de negócio. Exemplo de chave:
+
+```sql
+CREATE TABLE consumer_inbox (
+    consumer_name VARCHAR(100) NOT NULL,
+    event_id UUID NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (consumer_name, event_id)
+);
+```
+
+O consumidor insere a chave na inbox e aplica seu efeito de negócio na mesma
+transação; conflito na chave significa que o evento já foi processado e pode
+ser confirmado sem repetir o efeito.
+
+Etapas internas conhecidas da saga são omitidas intencionalmente. Um tipo de
+evento sem mapeamento falha explicitamente e não permite avançar o checkpoint:
+não há descarte nem dead-letter automático, pois isso poderia perder um evento
+de negócio. Corrija o mapeamento/contrato e retome o publisher; não avance o
+checkpoint manualmente sem procedimento de recuperação aprovado.
+
+O envelope v1 usa os subjects `<topic>-value`. Configure o Schema Registry com
+compatibilidade `BACKWARD_TRANSITIVE`; mudanças compatíveis devem ser aditivas
+e opcionais. Mudanças incompatíveis exigem novo tópico/subject versionado e
+migração coordenada dos consumidores. Como `data` é aberto no JSON Schema v1,
+o Registry valida o envelope, mas não garante compatibilidade dos campos
+específicos de cada tipo de evento; mantenha testes de contrato por tipo.
+
+Monitore `integration.publisher.batches.failed`,
+`integration.publisher.failure.event.position` e
+`integration.publisher.event.lag`, além do timer de duração. Configure alertas
+para qualquer aumento de lotes falhos, posição de falha diferente de zero e lag
+persistente. O limite de lag e a janela de alerta devem ser definidos conforme
+a capacidade e o objetivo operacional do ambiente; não há SLO de lag medido
+neste repositório.
 
 ## Tecnologias e pré-requisitos
 
@@ -467,7 +511,9 @@ uma assinatura externa.
   Apenas `health` é público; os demais endpoints exigem autenticação.
 - Configuração de Micrometer tracing e exportação OTLP.
 - Componentes de projeção e publisher registram timers, contadores de eventos,
-  lotes com falha do publisher e gauges de lag quando executados.
+  lotes com falha do publisher, posição do evento que bloqueou o checkpoint e
+  gauges de lag quando executados. Para a política de retry e os alertas Kafka,
+  consulte [Publicação para Kafka](#publicação-para-kafka).
 
 Restrinja endpoints de métricas e health pela rede/ingress. Configure um coletor
 OTLP para receber traces. O sampling padrão de 10% é apenas uma configuração
@@ -505,6 +551,9 @@ teste; o broker Kafka real permanece fora desta etapa.
 Ainda não há benchmark automatizado ou teste de caos que demonstre as metas
 documentadas de p95, lag, throughput ou rebuild de 10.000 eventos. Elas devem
 ser medidas em ambiente representativo antes de serem declaradas atendidas.
+O CI também não inicia um broker Kafka/Schema Registry real; a falha/repetição
+é testada com um publisher controlado, e a compatibilidade efetiva dos subjects
+deve ser validada no ambiente que hospeda o Registry.
 
 ## Limitações e próximos passos
 
