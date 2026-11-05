@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,6 +35,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(classes = CommandApiApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ContaCommandApiIT {
+
+    static {
+        System.out.println("Test class loader: " + ContaCommandApiIT.class.getClassLoader());
+        System.out.println("BootstrapWith loader: " + BootstrapWith.class.getClassLoader());
+        System.out.println("Declared BootstrapWith: "
+                + ContaCommandApiIT.class.getDeclaredAnnotation(BootstrapWith.class));
+        System.out.println("Merged BootstrapWith: "
+                + AnnotatedElementUtils.findMergedAnnotation(ContaCommandApiIT.class, BootstrapWith.class));
+    }
 
     @Container
     static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>("postgres:16-alpine");
