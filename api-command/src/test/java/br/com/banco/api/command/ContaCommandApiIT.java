@@ -58,7 +58,7 @@ class ContaCommandApiIT {
     private ResponseEntity<String> postAs(String subject, String url, Object body, String key) {
         var h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_JSON);
-        h.setBearerAuth("subject:" + subject);
+        h.setBearerAuth("subject-" + subject);
         if (key != null) h.set("Idempotency-Key", key);
         return rest.postForEntity(url, new HttpEntity<>(body, h), String.class);
     }
@@ -69,7 +69,7 @@ class ContaCommandApiIT {
             String token = invocation.getArgument(0);
             return Jwt.withTokenValue(token)
                     .header("alg", "none")
-                    .claim("sub", token.substring("subject:".length()))
+                    .claim("sub", token.substring("subject-".length()))
                     .issuedAt(Instant.now())
                     .expiresAt(Instant.now().plusSeconds(300))
                     .build();
@@ -94,7 +94,7 @@ class ContaCommandApiIT {
     void titularAutenticadoEObtidoDoTokenEHeaderArbitrarioNaoAutorizaOutroUsuario() throws Exception {
         var headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth("subject:alice");
+        headers.setBearerAuth("subject-alice");
         headers.set("X-User-Id", "bob");
         var opened = rest.postForEntity("/contas",
                 new HttpEntity<>(Map.of("limite", "0"), headers), String.class);
@@ -103,7 +103,7 @@ class ContaCommandApiIT {
 
         var forged = new HttpHeaders();
         forged.setContentType(MediaType.APPLICATION_JSON);
-        forged.setBearerAuth("subject:bob");
+        forged.setBearerAuth("subject-bob");
         forged.set("X-User-Id", "alice");
         var denied = rest.postForEntity("/contas/" + accountId + "/depositos",
                 new HttpEntity<>(Map.of("valor", "10", "origem", "CAIXA"), forged), String.class);
@@ -159,7 +159,7 @@ class ContaCommandApiIT {
         UUID correlationId = UUID.randomUUID();
         var headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth("subject:test-owner");
+        headers.setBearerAuth("subject-test-owner");
         headers.set("X-Correlation-Id", correlationId.toString());
 
         var response = rest.postForEntity("/contas",
