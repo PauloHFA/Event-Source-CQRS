@@ -141,13 +141,16 @@ posição que bloqueou o processamento e lag, com orientação de alertas no REA
 **Testes adicionados:** falha transitória, checkpoint não avançado, duplicação
 possível do primeiro evento após retry, retomada pelo checkpoint persistido
 após recriar o runner, política de retry e resposta HTTP 409 do Schema Registry.
-O teste PostgreSQL de falha/reenvio está no conjunto `*IT` e aguarda execução no
-CI. Validação local `mvn -pl infrastructure -am test`: 47 testes unitários
-passaram; todos os testes, inclusive o `*IT`, foram compilados.
+O teste PostgreSQL de falha/reenvio passou no CI hospedado (execução
+`41971348901`, commit `35bcd0d`). Essa execução passou 67 testes unitários e
+30 testes de integração, sem falhas ou skips. Validação local
+`mvn -pl infrastructure -am test`: 47 testes unitários passaram.
 
 **Validação pendente:** o CI não inicia Kafka nem Schema Registry reais. A
 compatibilidade efetiva dos subjects e a entrega/recuperação com broker devem
-ser verificadas no ambiente de integração antes de concluir o item.
+ser verificadas no ambiente de integração antes de concluir o item. A resposta
+HTTP 409 simulada confirma que o cliente não aceita incompatibilidade, mas não
+substitui um teste de compatibilidade real entre versões no Registry.
 
 ### 6. Padronizar o contrato de erros — pendente
 
