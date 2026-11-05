@@ -176,7 +176,8 @@ Monitore `integration.publisher.batches.failed`,
 para qualquer aumento de lotes falhos, posição de falha diferente de zero e lag
 persistente. O limite de lag e a janela de alerta devem ser definidos conforme
 a capacidade e o objetivo operacional do ambiente; não há SLO de lag medido
-neste repositório.
+neste repositório. O projeto não inclui um consumidor Kafka nem cria uma inbox
+de produção: o SQL acima é um padrão para os serviços consumidores.
 
 ## Tecnologias e pré-requisitos
 
@@ -540,13 +541,14 @@ via Testcontainers; os relatórios Surefire e Failsafe são publicados como
 artefato, inclusive quando a execução falha. Veja o
 [workflow de CI](./.github/workflows/ci.yml).
 
-O Maven precisa estar instalado localmente. Os testes `*IT` usam PostgreSQL
-Testcontainers e falham quando Docker não está acessível — não são ignorados
-silenciosamente. A suíte cobre regras de domínio, handlers, saga,
-snapshots/time travel, serialização e upcasting, cifra AES-GCM, publicação e
-mapping, filtro de correlation ID, migrations, projeções, concorrência e fluxo
-HTTP da API. O teste de publisher simula falha e repetição com um publisher de
-teste; o broker Kafka real permanece fora desta etapa.
+O Maven precisa estar instalado localmente. Os testes `*IT` usam PostgreSQL,
+Kafka e Schema Registry via Testcontainers e falham quando Docker não está
+acessível — não são ignorados silenciosamente. A suíte cobre regras de domínio,
+handlers, saga, snapshots/time travel, serialização e upcasting, cifra AES-GCM,
+publicação, mapping, filtro de correlation ID, migrations, projeções,
+concorrência e fluxo HTTP da API. O teste de publisher simula falha e repetição
+para verificar o checkpoint; um teste separado publica e consome o wire format
+em Kafka real e verifica compatibilidade no Schema Registry real.
 
 Ainda não há benchmark automatizado ou teste de caos que demonstre as metas
 documentadas de p95, lag, throughput ou rebuild de 10.000 eventos. Elas devem
