@@ -7,9 +7,21 @@ spring:
     password: ${DB_PASSWORD:banco}
   flyway:
     enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
 banco:
   crypto:
     master-key: ${BANCO_CRYPTO_MASTER_KEY:}
+    rotation-new-master-key: ${BANCO_CRYPTO_ROTATION_NEW_MASTER_KEY:}
+  maintenance:
+    enabled: ${BANCO_MAINTENANCE_ENABLED:false}
+  projections:
+    enabled: ${BANCO_PROJECTIONS_ENABLED:true}
+    batch-size: ${BANCO_PROJECTIONS_BATCH_SIZE:200}
+    poll-interval: ${BANCO_PROJECTIONS_POLL_INTERVAL:1000}
 management:
   endpoints:
     web:

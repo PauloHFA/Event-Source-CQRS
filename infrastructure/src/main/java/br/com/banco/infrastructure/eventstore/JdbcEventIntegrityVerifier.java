@@ -31,6 +31,11 @@ public final class JdbcEventIntegrityVerifier {
         return verification;
     }
 
+    /** Caller must run this method in a repeatable-read transaction. */
+    public IntegrityVerification verifyInCurrentTransaction() {
+        return verifyConsistentSnapshot();
+    }
+
     private IntegrityVerification verifyConsistentSnapshot() {
         Map<String, StreamState> states = new HashMap<>();
         jdbc.query("""

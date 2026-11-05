@@ -4,6 +4,7 @@ import br.com.banco.application.ContaJaExisteException;
 import br.com.banco.application.port.ConcurrencyException;
 import br.com.banco.domain.DomainException;
 import br.com.banco.domain.ValorInvalidoException;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -33,5 +34,9 @@ public class ApiExceptionHandler {
     ProblemDetail conflito(ConcurrencyException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     }
-}
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    ProblemDetail parametroInvalido(ConstraintViolationException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parâmetro de consulta inválido.");
+    }
+}
