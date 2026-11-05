@@ -146,13 +146,15 @@ Confluent 7.6.1 e Schema Registry 7.6.1 via Testcontainers. O teste publica e
 consome o wire format com schema ID e headers reais, e registra uma versão
 incompatível sob `BACKWARD_TRANSITIVE` para confirmar a rejeição real do Registry.
 `mvn -pl infrastructure -am test` compila os testes e passa os testes unitários;
-Docker local está pausado, portanto o novo teste de containers depende da CI.
+Docker local está pausado, então os testes com containers foram executados na
+CI hospedada (`mvn verify`, PR #7), com sucesso.
 
-**Validação pendente:** aguardar a CI hospedada executar `mvn verify`, incluindo
-os dois testes com Kafka/Schema Registry. A recuperação de indisponibilidade e
-o reenvio continuam cobertos pelo teste determinístico do runner/ checkpoint;
-o publisher Kafka real usa os retries e limite de entrega configurados, mas não
-há ainda um teste de caos que derrube e restaure um broker durante o envio.
+**Validação concluída:** a CI hospedada executou `mvn verify`, incluindo os
+testes com Kafka/Schema Registry reais, com sucesso (PR #7). A recuperação de
+indisponibilidade e o reenvio continuam cobertos pelo teste determinístico do
+runner/checkpoint; o publisher Kafka real usa os retries e limite de entrega
+configurados, mas não há ainda um teste de caos que derrube e restaure um broker
+durante o envio.
 
 ### 6. Padronizar o contrato de erros — pendente
 
