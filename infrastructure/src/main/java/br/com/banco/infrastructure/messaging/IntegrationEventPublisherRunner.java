@@ -33,6 +33,7 @@ public final class IntegrationEventPublisherRunner {
     private final Counter failedBatches;
     private final Timer batchDuration;
     private final AtomicLong eventLag = new AtomicLong();
+    private final AtomicLong failedEventPosition = new AtomicLong();
 
     public IntegrationEventPublisherRunner(JdbcTemplate jdbc, TransactionTemplate tx, JdbcEventStore eventStore,
                                            IntegrationEventMapper mapper, IntegrationEventPublisher publisher,
@@ -60,20 +61,31 @@ public final class IntegrationEventPublisherRunner {
         Gauge.builder("integration.publisher.event.lag", eventLag, AtomicLong::get)
                 .tag("publisher", CHECKPOINT_NAME)
                 .register(meters);
+        Gauge.builder("integration.publisher.failure.event.position", failedEventPosition, AtomicLong::get)
+                .tag("publisher", CHECKPOINT_NAME)
+                .register(meters);
     }
 
     /** Processa um lote; retorna a quantidade de eventos de domínio lidos. */
     public int runOnce() {
         Timer.Sample sample = Timer.start(meters);
         try {
-            Integer processed = tx.execute(status -> processBatch());
+            Integer processed;
+            try {
+                processed = tx.execute(status -> processBatch());
+            } catch (RuntimeException e) {
+                failedBatches.increment();
+                try {
+                    updateLag();
+                } catch (RuntimeException lagFailure) {
+                    if (lagFailure != e) e.addSuppressed(lagFailure);
+                }
+                throw e;
+            }
             int count = Objects.requireNonNull(processed, "A transação do publisher não retornou resultado.");
             processedEvents.increment(count);
             updateLag();
             return count;
-        } catch (RuntimeException e) {
-            failedBatches.increment();
-            throw e;
         } finally {
             sample.stop(batchDuration);
         }
@@ -93,8 +105,13 @@ public final class IntegrationEventPublisherRunner {
         if (events.isEmpty()) return 0;
 
         for (PublishableEvent event : events) {
-            mapper.map(event).ifPresent(mapped ->
-                    publisher.publish(mapped.topic(), event.streamId(), mapped.event()));
+            try {
+                mapper.map(event).ifPresent(mapped ->
+                        publisher.publish(mapped.topic(), event.streamId(), mapped.event()));
+            } catch (RuntimeException e) {
+                failedEventPosition.set(event.globalPosition());
+                throw e;
+            }
         }
         long lastPosition = events.get(events.size() - 1).globalPosition();
         jdbc.update("""
@@ -102,6 +119,7 @@ public final class IntegrationEventPublisherRunner {
                 SET last_position = ?, updated_at = now()
                 WHERE publisher_name = ?
                 """, lastPosition, CHECKPOINT_NAME);
+        failedEventPosition.set(0);
         return events.size();
     }
 

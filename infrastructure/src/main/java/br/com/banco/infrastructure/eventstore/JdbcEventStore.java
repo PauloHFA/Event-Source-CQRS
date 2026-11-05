@@ -15,9 +15,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /** Event Store append-only em PostgreSQL com concorrência otimista por (stream_id, version). */
 public class JdbcEventStore implements EventStore {
+
+    private static final int CURSOR_LOCK_NAMESPACE = 0x45564E54;
+    private static final int CURSOR_LOCK_ID = 0x53544F52;
 
     private static final String INSERT_SQL = """
             INSERT INTO events (event_id, stream_id, stream_type, version, event_type,
@@ -81,6 +85,8 @@ public class JdbcEventStore implements EventStore {
         String metaJson = serializer.toJson(meta);
         try {
             tx.executeWithoutResult(status -> {
+                jdbc.execute("SELECT pg_advisory_xact_lock_shared("
+                        + CURSOR_LOCK_NAMESPACE + ", " + CURSOR_LOCK_ID + ")");
                 jdbc.update("""
                         INSERT INTO event_integrity_heads
                             (stream_id, chain_start_position, last_position, last_hash)
@@ -102,14 +108,19 @@ public class JdbcEventStore implements EventStore {
                     int schemaVersion = e.schemaVersion();
                     String payload = serializer.serializeEvent(e);
                     Timestamp occurredAt = Timestamp.from(e.em());
-                    EventPosition stored = jdbc.queryForObject(INSERT_SQL + " RETURNING global_position, occurred_at",
+                    EventPosition stored = jdbc.queryForObject(INSERT_SQL + """
+                                    RETURNING global_position, occurred_at, payload::text AS stored_payload,
+                                              metadata::text AS stored_metadata
+                                    """,
                             (rs, row) -> new EventPosition(rs.getLong("global_position"),
-                                    rs.getTimestamp("occurred_at").toInstant()),
+                                    rs.getTimestamp("occurred_at").toInstant(),
+                                    rs.getString("stored_payload"), rs.getString("stored_metadata")),
                             e.eventId(), streamId, streamType(streamId), version, eventType, schemaVersion,
                             payload, metaJson, occurredAt);
                     if (stored == null) throw new IllegalStateException("Event Store não retornou global_position.");
                     byte[] eventHash = EventIntegrityHash.calculate(previousHash, stored.position, e.eventId(),
-                            streamId, version, eventType, schemaVersion, payload, metaJson, stored.occurredAt);
+                            streamId, version, eventType, schemaVersion, stored.payload, stored.metadata,
+                            stored.occurredAt);
                     jdbc.update("""
                             INSERT INTO event_integrity_chain (global_position, event_id, previous_hash, event_hash)
                             VALUES (?, ?, ?, ?)
@@ -128,39 +139,35 @@ public class JdbcEventStore implements EventStore {
 
     /**
      * Lê o log global a partir de uma posição, para projeções (seção 5.4).
-     * Só retorna linhas cujo xmin é anterior ao menor xid ainda ativo, evitando pular eventos de
-     * transações que obtiveram a posição mas ainda não fizeram commit.
-     * Limitação conhecida: transações que obtêm xid e posição em ordem inversa numa janela de
-     * microssegundos ainda podem produzir um buraco; um atraso de segurança pode ser somado se necessário.
+     * A barreira exclusiva espera todos os appends em andamento concluírem antes de ler o cursor,
+     * pois a ordem de uma sequence não garante a ordem de commit.
      */
     public List<StoredEvent> readAll(long afterPosition, int limit) {
-        return jdbc.query("""
+        return withCursorBarrier(() -> jdbc.query("""
                 SELECT global_position, stream_id, version, schema_version, event_type,
                        payload::text AS payload, occurred_at
                 FROM events
                 WHERE global_position > ?
                   AND stream_type = 'Conta'
-                  AND xmin::text::bigint < pg_snapshot_xmin(pg_current_snapshot())::text::bigint
                 ORDER BY global_position
                 LIMIT ?
                 """, (rs, i) -> new StoredEvent(
                 rs.getLong("global_position"), rs.getString("stream_id"), rs.getInt("version"),
                 serializer.deserialize(rs.getString("stream_id"), rs.getString("event_type"),
                         rs.getInt("schema_version"), rs.getString("payload")),
-                rs.getTimestamp("occurred_at").toInstant()), afterPosition, limit);
+                rs.getTimestamp("occurred_at").toInstant()), afterPosition, limit));
     }
 
     /**
      * Lê o log global de todos os agregados para o publisher (o Event Store é o próprio outbox).
-     * Mesma regra de visibilidade por xmin de {@link #readAll}.
+     * Usa a mesma barreira de commit que {@link #readAll}.
      */
     public List<PublishableEvent> readForPublishing(long afterPosition, int limit) {
-        return jdbc.query("""
+        return withCursorBarrier(() -> jdbc.query("""
                 SELECT global_position, stream_id, version, schema_version, event_type, payload::text AS payload,
                        metadata->>'correlationId' AS correlation_id, occurred_at
                 FROM events
                 WHERE global_position > ?
-                  AND xmin::text::bigint < pg_snapshot_xmin(pg_current_snapshot())::text::bigint
                 ORDER BY global_position
                 LIMIT ?
                 """, (rs, i) -> {
@@ -171,7 +178,15 @@ public class JdbcEventStore implements EventStore {
                             rs.getInt("schema_version"), rs.getString("payload")),
                     corr == null ? null : UUID.fromString(corr),
                     rs.getTimestamp("occurred_at").toInstant());
-        }, afterPosition, limit);
+        }, afterPosition, limit));
+    }
+
+    private <T> T withCursorBarrier(Supplier<T> read) {
+        return tx.execute(status -> {
+            jdbc.execute("SELECT pg_advisory_xact_lock("
+                    + CURSOR_LOCK_NAMESPACE + ", " + CURSOR_LOCK_ID + ")");
+            return read.get();
+        });
     }
 
     public static String contaStreamId(UUID contaId) {
@@ -179,5 +194,5 @@ public class JdbcEventStore implements EventStore {
     }
 
     private record IntegrityHead(long lastPosition, byte[] lastHash) {}
-    private record EventPosition(long position, java.time.Instant occurredAt) {}
+    private record EventPosition(long position, java.time.Instant occurredAt, String payload, String metadata) {}
 }

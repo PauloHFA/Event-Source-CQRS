@@ -21,6 +21,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +45,7 @@ class ProjectionIT {
     static TransactionTemplate tx;
     static JdbcEventStore store;
     static ContaProjector projector;
+    static ContaReadModelQueries queries;
     static ProjectionRunner runner;
     final Clock clock = Clock.systemUTC();
     final EventMetadata meta = EventMetadata.of(UUID.randomUUID(), "teste");
@@ -60,6 +63,7 @@ class ProjectionIT {
         tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
         store = new JdbcEventStore(jdbc, tx, new EventSerializer());
         projector = new ContaProjector(jdbc);
+        queries = new ContaReadModelQueries(jdbc);
         runner = new ProjectionRunner(jdbc, tx, store, projector, 200);
     }
 
@@ -114,6 +118,29 @@ class ProjectionIT {
 
         assertThat(jdbc.queryForObject("SELECT status FROM rm_conta_saldo WHERE conta_id = ?", String.class, id))
                 .isEqualTo("BLOQUEADA");
+    }
+
+    @Test
+    void saldoEExtratoSaoConsultadosDoReadModelComPaginacaoEstavel() {
+        UUID id = abrirConta("0");
+        Clock mesmoInstante = Clock.fixed(Instant.parse("2026-01-01T10:00:00Z"), ZoneOffset.UTC);
+        operar(id, c -> c.depositar(new BigDecimal("10.00"), "X", mesmoInstante));
+        operar(id, c -> c.depositar(new BigDecimal("15.00"), "X", mesmoInstante));
+        runner.runUntilCaughtUp();
+
+        assertThat(queries.saldo(id)).get()
+                .extracting(ContaSaldoReadModel::saldo)
+                .isEqualTo(new BigDecimal("25.00"));
+        var primeiraPagina = queries.extrato(id, 0, 1);
+        var segundaPagina = queries.extrato(id, 1, 1);
+
+        assertThat(primeiraPagina.total()).isEqualTo(2);
+        assertThat(primeiraPagina.movimentacoes()).singleElement()
+                .extracting(MovimentacaoReadModel::saldoApos)
+                .isEqualTo(new BigDecimal("25.00"));
+        assertThat(segundaPagina.movimentacoes()).singleElement()
+                .extracting(MovimentacaoReadModel::saldoApos)
+                .isEqualTo(new BigDecimal("10.00"));
     }
 
     @Test
@@ -202,4 +229,3 @@ class ProjectionIT {
         assertThat(runner.checkpoint()).isEqualTo(max);
     }
 }
-

@@ -17,7 +17,9 @@ import br.com.banco.infrastructure.idempotency.JdbcIdempotencyStore;
 import br.com.banco.infrastructure.idempotency.TransactionalUnitOfWork;
 import br.com.banco.infrastructure.privacy.AesGcmPersonalDataCipher;
 import br.com.banco.infrastructure.privacy.CryptoShreddingService;
+import br.com.banco.infrastructure.privacy.JdbcOperationalAuditLog;
 import br.com.banco.infrastructure.privacy.JdbcPersonalDataKeyStore;
+import br.com.banco.infrastructure.privacy.PersonalDataMasterKeyRotationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -51,8 +53,20 @@ public class BeansConfig {
 
     @Bean
     CryptoShreddingService cryptoShreddingService(
-            AesGcmPersonalDataCipher cipher, TransactionTemplate tx) {
-        return new CryptoShreddingService(cipher, tx);
+            AesGcmPersonalDataCipher cipher, TransactionTemplate tx, JdbcOperationalAuditLog auditLog) {
+        return new CryptoShreddingService(cipher, tx, auditLog);
+    }
+
+    @Bean
+    JdbcOperationalAuditLog operationalAuditLog(JdbcTemplate jdbc) {
+        return new JdbcOperationalAuditLog(jdbc);
+    }
+
+    @Bean
+    PersonalDataMasterKeyRotationService personalDataMasterKeyRotationService(
+            JdbcTemplate jdbc, JdbcPersonalDataKeyStore keyStore, TransactionTemplate tx,
+            JdbcOperationalAuditLog auditLog) {
+        return new PersonalDataMasterKeyRotationService(jdbc, keyStore, tx, auditLog);
     }
 
     @Bean
