@@ -102,14 +102,19 @@ public class JdbcEventStore implements EventStore {
                     int schemaVersion = e.schemaVersion();
                     String payload = serializer.serializeEvent(e);
                     Timestamp occurredAt = Timestamp.from(e.em());
-                    EventPosition stored = jdbc.queryForObject(INSERT_SQL + " RETURNING global_position, occurred_at",
+                    EventPosition stored = jdbc.queryForObject(INSERT_SQL + """
+                                    RETURNING global_position, occurred_at, payload::text AS stored_payload,
+                                              metadata::text AS stored_metadata
+                                    """,
                             (rs, row) -> new EventPosition(rs.getLong("global_position"),
-                                    rs.getTimestamp("occurred_at").toInstant()),
+                                    rs.getTimestamp("occurred_at").toInstant(),
+                                    rs.getString("stored_payload"), rs.getString("stored_metadata")),
                             e.eventId(), streamId, streamType(streamId), version, eventType, schemaVersion,
                             payload, metaJson, occurredAt);
                     if (stored == null) throw new IllegalStateException("Event Store não retornou global_position.");
                     byte[] eventHash = EventIntegrityHash.calculate(previousHash, stored.position, e.eventId(),
-                            streamId, version, eventType, schemaVersion, payload, metaJson, stored.occurredAt);
+                            streamId, version, eventType, schemaVersion, stored.payload, stored.metadata,
+                            stored.occurredAt);
                     jdbc.update("""
                             INSERT INTO event_integrity_chain (global_position, event_id, previous_hash, event_hash)
                             VALUES (?, ?, ?, ?)
@@ -179,5 +184,5 @@ public class JdbcEventStore implements EventStore {
     }
 
     private record IntegrityHead(long lastPosition, byte[] lastHash) {}
-    private record EventPosition(long position, java.time.Instant occurredAt) {}
+    private record EventPosition(long position, java.time.Instant occurredAt, String payload, String metadata) {}
 }

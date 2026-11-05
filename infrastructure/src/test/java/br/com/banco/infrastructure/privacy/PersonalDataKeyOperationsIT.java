@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -33,6 +34,11 @@ class PersonalDataKeyOperationsIT {
     static JdbcTemplate jdbc;
     static TransactionTemplate transaction;
     static JdbcOperationalAuditLog auditLog;
+
+    @BeforeEach
+    void clearPersonalDataKeys() {
+        jdbc.update("DELETE FROM personal_data_keys");
+    }
 
     @BeforeAll
     static void setUp() {
