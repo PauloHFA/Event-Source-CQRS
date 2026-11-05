@@ -36,7 +36,7 @@ passaram no CI hospedado (execução `41962134754`, commit `b48c5be`): os sete
 testes de `ContaCommandApiIT` passaram, incluindo token ausente, identidade
 derivada do token, rejeição de acesso a outra conta e idempotência.
 
-### 2. Completar o lado de consultas do CQRS — validação de retomada e agendamento em andamento
+### 2. Completar o lado de consultas do CQRS — implementação e validação concluídas
 
 **Objetivo:** tornar os read models utilizáveis pela aplicação.
 
@@ -58,9 +58,10 @@ autenticadas de saldo/extrato e paginação limitada com ordenação estável. T
 de controller e PostgreSQL foram adicionados. No CI hospedado (execução
 `41962134754`, commit `b48c5be`), `ProjectionIT` passou com seis testes,
 cobrindo consultas SQL, paginação estável, idempotência, reconstrução e
-concorrência. Nesta etapa foram adicionados testes para confirmar que a projeção
-agendada atualiza o read model sem acionamento manual e que um runner recém-criado
-retoma do checkpoint persistido.
+concorrência. Na execução `41980601989` do GitHub Actions, `ProjectionIT` passou
+com sete testes, incluindo retomada por runner recriado a partir do checkpoint
+persistido; `ContaCommandApiIT` passou com oito testes, incluindo convergência
+do read model pelo agendador sem acionamento manual.
 
 ### 3. Tornar os testes de integração reproduzíveis no CI — concluída
 
@@ -155,7 +156,7 @@ runner/checkpoint; o publisher Kafka real usa os retries e limite de entrega
 configurados, mas não há ainda um teste de caos que derrube e restaure um broker
 durante o envio.
 
-### 6. Padronizar o contrato de erros — implementação pronta; validação CI pendente
+### 6. Padronizar o contrato de erros — implementação e validação CI concluídas
 
 **Objetivo:** não acoplar clientes a mensagens de exceção do domínio.
 
@@ -169,6 +170,8 @@ durante o envio.
 validação, regras de domínio, conflito de concorrência e persistência. Falhas de
 banco são registradas no servidor e retornam detalhe genérico ao cliente. Testes
 unitários verificam códigos/status e a integração verifica o formato HTTP real.
+Na execução `41980601989` do GitHub Actions, os testes unitários e de API
+passaram sem falhas ou skips.
 
 ### 7. Medir desempenho e preparar operação — pendente
 
