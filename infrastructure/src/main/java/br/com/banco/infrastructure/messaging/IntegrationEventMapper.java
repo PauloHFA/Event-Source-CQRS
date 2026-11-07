@@ -48,6 +48,9 @@ public class IntegrationEventMapper {
                     pub(p, TOPIC_CONTA, "ContaDesbloqueada", dados("contaId", e.contaId()));
             case ContaEvent.ContaEncerrada e ->
                     pub(p, TOPIC_CONTA, "ContaEncerrada", dados("contaId", e.contaId()));
+            case ContaEvent.LimiteDiarioConfigurado e ->
+                    pub(p, TOPIC_CONTA, "LimiteDiarioConfigurado",
+                            dados("contaId", e.contaId(), "novoLimite", e.novoLimite() != null ? dec(e.novoLimite()) : null));
         };
     }
 

@@ -18,10 +18,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.util.Map;
-import java.util.Base64;
-import java.util.UUID;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -140,6 +142,7 @@ class ContaCommandApiIT {
         var r = post("/contas/" + id + "/saques", Map.of("valor", "10"), null);
 
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(mapper.readTree(r.getBody()).path("code").asText()).isEqualTo("SALDO_INSUFICIENTE");
         Integer eventos = jdbc.queryForObject(
                 "SELECT count(*) FROM events WHERE stream_id = ?", Integer.class, "conta-" + id);
         assertThat(eventos).isEqualTo(1);
@@ -152,6 +155,29 @@ class ContaCommandApiIT {
         var r = post("/contas/" + id + "/depositos", Map.of("valor", "-5", "origem", "X"), null);
 
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(mapper.readTree(r.getBody()).path("code").asText()).isEqualTo("REQUEST_INVALIDO");
+    }
+
+    @Test
+    void projecaoAgendadaAtualizaReadModelSemAcionamentoManual() throws Exception {
+        String id = abrirConta(null);
+        var response = post("/contas/" + id + "/depositos",
+                Map.of("valor", "10.00", "origem", "CAIXA"), null);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+
+        UUID accountId = UUID.fromString(id);
+        long deadline = System.nanoTime() + Duration.ofSeconds(15).toNanos();
+        BigDecimal saldoProjetado = null;
+        while (saldoProjetado == null || saldoProjetado.compareTo(new BigDecimal("10.00")) != 0) {
+            var saldos = jdbc.query("SELECT saldo FROM rm_conta_saldo WHERE conta_id = ?",
+                    (rs, rowNum) -> rs.getBigDecimal("saldo"), accountId);
+            if (!saldos.isEmpty()) saldoProjetado = saldos.get(0);
+            if (saldoProjetado != null && saldoProjetado.compareTo(new BigDecimal("10.00")) == 0) break;
+            if (System.nanoTime() >= deadline) break;
+            Thread.sleep(100);
+        }
+
+        assertThat(saldoProjetado).isEqualByComparingTo("10.00");
     }
 
     @Test

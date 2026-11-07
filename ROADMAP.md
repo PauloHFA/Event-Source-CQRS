@@ -36,7 +36,7 @@ passaram no CI hospedado (execução `41962134754`, commit `b48c5be`): os sete
 testes de `ContaCommandApiIT` passaram, incluindo token ausente, identidade
 derivada do token, rejeição de acesso a outra conta e idempotência.
 
-### 2. Completar o lado de consultas do CQRS — implementação pronta; automação e retomada pendentes
+### 2. Completar o lado de consultas do CQRS — implementação e validação concluídas
 
 **Objetivo:** tornar os read models utilizáveis pela aplicação.
 
@@ -58,8 +58,10 @@ autenticadas de saldo/extrato e paginação limitada com ordenação estável. T
 de controller e PostgreSQL foram adicionados. No CI hospedado (execução
 `41962134754`, commit `b48c5be`), `ProjectionIT` passou com seis testes,
 cobrindo consultas SQL, paginação estável, idempotência, reconstrução e
-concorrência. A execução agendada e a retomada após reinício ainda não têm
-validação de integração específica e permanecem pendentes.
+concorrência. Na execução `41980601989` do GitHub Actions, `ProjectionIT` passou
+com sete testes, incluindo retomada por runner recriado a partir do checkpoint
+persistido; `ContaCommandApiIT` passou com oito testes, incluindo convergência
+do read model pelo agendador sem acionamento manual.
 
 ### 3. Tornar os testes de integração reproduzíveis no CI — concluída
 
@@ -75,10 +77,8 @@ em ambiente automatizado.
 
 **Implementação:** `.github/workflows/ci.yml` executa `mvn verify` com Java 21
 em pull requests para `main`, pushes para `main` e execução manual. O runner
-Ubuntu usa Docker para PostgreSQL Testcontainers; Surefire/Failsafe reports são
-publicados mesmo em caso de falha. Não há serviço Kafka no pipeline: o teste de
-publisher usa um double determinístico, enquanto o broker real fica para a
-etapa 5.
+Ubuntu usa Docker para PostgreSQL, Kafka e Schema Registry via Testcontainers;
+Surefire/Failsafe reports são publicados mesmo em caso de falha.
 
 **Validação:** a execução `41962134754` do GitHub Actions concluiu `mvn verify`
 com sucesso no Java 21. Passaram 64 testes unitários, 23 testes de integração
@@ -121,7 +121,7 @@ testes MVC passaram, cobrindo autorização, confirmação e condições
 operacionais. `JdbcEventStoreIT` também confirmou a verificação de cadeia válida
 e a detecção de adulteração.
 
-### 5. Endurecer a publicação e o consumo Kafka — implementação pronta; validação CI pendente
+### 5. Endurecer a publicação e o consumo Kafka — implementação e validação CI concluídas
 
 **Objetivo:** tornar explícitos e testáveis os cenários de repetição e falha.
 
@@ -156,7 +156,7 @@ runner/checkpoint; o publisher Kafka real usa os retries e limite de entrega
 configurados, mas não há ainda um teste de caos que derrube e restaure um broker
 durante o envio.
 
-### 6. Padronizar o contrato de erros — pendente
+### 6. Padronizar o contrato de erros — implementação e validação CI concluídas
 
 **Objetivo:** não acoplar clientes a mensagens de exceção do domínio.
 
@@ -166,17 +166,46 @@ durante o envio.
   para respostas HTTP consistentes.
 - Testar status, código e formato das respostas públicas.
 
-### 7. Medir desempenho e preparar operação — pendente
+**Implementação:** respostas `ProblemDetail` incluem `code` estável para
+validação, regras de domínio, conflito de concorrência e persistência. Falhas de
+banco são registradas no servidor e retornam detalhe genérico ao cliente. Testes
+unitários verificam códigos/status e a integração verifica o formato HTTP real.
+Na execução `41980601989` do GitHub Actions, os testes unitários e de API
+passaram sem falhas ou skips.
 
-**Objetivo:** substituir metas não verificadas por evidências e requisitos
-operacionais.
+### 7. Medir desempenho e preparar operação — implementação concluída
 
-**Escopo e aceite:**
-- Criar cenários de carga para comandos, projeções, publisher e rebuild.
-- Medir e registrar p95/p99, throughput, lag e tempo de recuperação em ambiente
-  documentado.
-- Revisar alertas, retenção de logs, backups, restauração e disaster recovery.
-- Não declarar metas atendidas sem resultados reproduzíveis.
+**Objetivo:** substituir metas não verificadas por evidências e requisitos operacionais mensuráveis (RNF-03 a RNF-06).
+
+**Implementação e validação:**
+- `ContaReconstrucaoBenchmarkTest`: comprovação de RNF-06 com 10.000 eventos. Tempo medido: média de 0,026 ms e máximo de 0,235 ms (meta: < 50 ms).
+- `PerformanceBenchmarkIT`: benchmark end-to-end com PostgreSQL via Testcontainers inserindo 10.000 eventos, validando reidratação com banco real (< 50 ms) e concorrência massiva de escrita (RNF-03 e RNF-05).
+- `load-tests/k6-load-test.js`: script k6 de carga com ramp-up, estresse de 200 VUs e thresholds estritos de p95 < 100 ms (RNF-03) e throughput >= 1.000 req/s (RNF-05).
+
+### 8. Limite diário de movimentação (RN-07), extrato por período (RF-07) e recuperação de sagas — concluída
+
+**Objetivo:** suprir os requisitos de negócio, funcionais e operacionais pendentes da especificação.
+
+**Implementação e validação:**
+- [RN-07] Limite diário configurável por conta em `Conta`, acumulando débitos por dia civil de forma determinística, rejeitando excedentes com `LimiteDiarioExcedidoException` (`422 LIMITE_DIARIO_EXCEDIDO`).
+- [RN-07] Endpoint `PUT /contas/{id}/limite-diario`, migração `V9__limite_diario.sql` e projeção em `ContaProjector`.
+- [RF-07] Parâmetros `de` e `ate` (`Instant`) adicionados a `GET /contas/{id}/extrato` e ao `ContaReadModelQueries`.
+- [RF-07] Endpoint de detalhes da conta em `GET /contas/{id}`.
+- [Operação] Agendador automático de recuperação de transferências travadas `TransferenciaRecoveryConfiguration` com métricas e logs estruturados.
+
+### 9. Separação física de API Query (Read Side CQRS) — concluída
+
+**Objetivo:** isolar completamente leitura e escrita em serviços HTTP autônomos (CQRS físico estrito), conforme Seção 4.3 da especificação.
+
+**Implementação e validação:**
+- Módulo Maven independente `api-query` criado, rodando por padrão na porta `8081`.
+- Endpoints de leitura transferidos exclusivamente para `api-query`:
+  - `GET /contas/{id}` (detalhes da conta no modelo de leitura).
+  - `GET /contas/{id}/saldo` (saldo atual projetado).
+  - `GET /contas/{id}/extrato?pagina=0&tamanho=20&de=...&ate=...` (extrato com paginação e filtro por período).
+- Segurança stateless via JWT/OIDC e autorização por titular (`sub`), além de filtro de correlação `X-Correlation-Id`.
+- Módulo `api-command` (porta `8080`) mantido estritamente para comandos de escrita e histórico / time travel via Event Store.
+- Testes unitários com MockMvc e Spring Security validados em `api-query` (`ContaQueryControllerTest`).
 
 ## Como atualizar este roadmap
 

@@ -33,6 +33,7 @@ public class ContaProjector {
             case ValorDepositado e -> movimentar(e.contaId(), v, e.valor(), "DEPOSITO", e.eventId(), stored);
             case ValorSacado e -> movimentar(e.contaId(), v, e.valor().negate(), "SAQUE", e.eventId(), stored);
             case ValorEstornado e -> movimentar(e.contaId(), v, e.valor(), "ESTORNO", e.eventId(), stored);
+            case LimiteDiarioConfigurado e -> limiteDiario(e.contaId(), v, e.novoLimite(), stored);
             case ContaBloqueada e -> status(e.contaId(), v, "BLOQUEADA", stored);
             case ContaDesbloqueada e -> status(e.contaId(), v, "ATIVA", stored);
             case ContaEncerrada e -> status(e.contaId(), v, "ENCERRADA", stored);
@@ -59,6 +60,13 @@ public class ContaProjector {
                 UPDATE rm_conta_saldo SET status = ?, versao = ?, atualizado_em = ?
                 WHERE conta_id = ? AND versao < ?
                 """, status, versao, Timestamp.from(stored.occurredAt()), contaId, versao);
+    }
+
+    private void limiteDiario(UUID contaId, int versao, BigDecimal limiteDiario, StoredEvent stored) {
+        jdbc.update("""
+                UPDATE rm_conta_saldo SET limite_diario = ?, versao = ?, atualizado_em = ?
+                WHERE conta_id = ? AND versao < ?
+                """, limiteDiario, versao, Timestamp.from(stored.occurredAt()), contaId, versao);
     }
 
     /** Esvazia o read model (a reconstrução zera também o checkpoint). */

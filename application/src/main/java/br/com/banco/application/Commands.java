@@ -12,6 +12,8 @@ public final class Commands {
 
     public record AbrirConta(UUID contaId, String titularRef, BigDecimal limite, Context ctx) {}
 
+    public record ConfigurarLimiteDiario(UUID contaId, BigDecimal novoLimite, Context ctx) {}
+
     public record DepositarValor(UUID contaId, BigDecimal valor, String origem, Context ctx) {}
 
     public record SacarValor(UUID contaId, BigDecimal valor, Context ctx) {}
@@ -28,4 +30,3 @@ public final class Commands {
     public record SolicitarTransferencia(UUID transferId, UUID origem, UUID destino, BigDecimal valor,
                                          Context ctx) {}
 }
-

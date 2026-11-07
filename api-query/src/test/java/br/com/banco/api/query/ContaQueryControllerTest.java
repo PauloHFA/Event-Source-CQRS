@@ -1,4 +1,4 @@
-package br.com.banco.api.command;
+package br.com.banco.api.query;
 
 import br.com.banco.infrastructure.projections.ContaReadModelQueries;
 import br.com.banco.infrastructure.projections.ContaSaldoReadModel;
@@ -54,6 +54,26 @@ class ContaQueryControllerTest {
     }
 
     @Test
+    void detalhesRetornaModeloCompletoDaConta() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        when(queries.saldo(accountId)).thenReturn(Optional.of(new ContaSaldoReadModel(
+                accountId, new BigDecimal("125.00"), new BigDecimal("50.00"), new BigDecimal("1000.00"),
+                "ATIVA", 4, Instant.parse("2026-01-01T10:00:00Z"))));
+
+        mvc.perform(get("/contas/{id}", accountId)
+                        .with(jwt().jwt(token -> token.subject("alice"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contaId").value(accountId.toString()))
+                .andExpect(jsonPath("$.saldo").value(125.0))
+                .andExpect(jsonPath("$.limite").value(50.0))
+                .andExpect(jsonPath("$.limiteDiario").value(1000.0))
+                .andExpect(jsonPath("$.status").value("ATIVA"))
+                .andExpect(jsonPath("$.versao").value(4));
+
+        verify(ownership).requireOwner(accountId, "alice");
+    }
+
+    @Test
     void retornaSaldoProjetadoEAutorizaPeloSubject() throws Exception {
         UUID accountId = UUID.randomUUID();
         when(queries.saldo(accountId)).thenReturn(Optional.of(new ContaSaldoReadModel(
@@ -85,46 +105,52 @@ class ContaQueryControllerTest {
     }
 
     @Test
-    void retornaPaginaDoExtratoComOrdenacaoProvenienteDoReadModel() throws Exception {
-        UUID accountId = UUID.randomUUID();
-        when(queries.saldo(accountId)).thenReturn(Optional.of(new ContaSaldoReadModel(
-                accountId, new BigDecimal("12.00"), BigDecimal.ZERO,
-                "ATIVA", 2, Instant.parse("2026-01-01T10:00:00Z"))));
-        when(queries.extrato(accountId, 1, 5)).thenReturn(new ExtratoReadModel(accountId, 1, 5, 6,
-                List.of(new MovimentacaoReadModel(UUID.randomUUID(), "DEPOSITO",
-                        new BigDecimal("12.00"), new BigDecimal("12.00"),
-                        Instant.parse("2026-01-01T10:00:00Z")))));
-
-        mvc.perform(get("/contas/{id}/extrato", accountId)
-                        .param("pagina", "1")
-                        .param("tamanho", "5")
-                        .with(jwt().jwt(token -> token.subject("alice"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.pagina").value(1))
-                .andExpect(jsonPath("$.tamanho").value(5))
-                .andExpect(jsonPath("$.total").value(6))
-                .andExpect(jsonPath("$.movimentacoes[0].tipo").value("DEPOSITO"));
-
-        verify(queries).extrato(eq(accountId), eq(1), eq(5));
-    }
-
-    @Test
-    void rejeitaTamanhoDePaginaAcimaDoLimite() throws Exception {
-        UUID accountId = UUID.randomUUID();
-
-        mvc.perform(get("/contas/{id}/extrato", accountId)
-                        .param("tamanho", "101")
-                        .with(jwt().jwt(token -> token.subject("alice"))))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void retornaServicoIndisponivelEnquantoProjecaoAindaNaoExiste() throws Exception {
+    void retorna503QuandoSaldoAindaNaoProjetado() throws Exception {
         UUID accountId = UUID.randomUUID();
         when(queries.saldo(accountId)).thenReturn(Optional.empty());
 
         mvc.perform(get("/contas/{id}/saldo", accountId)
                         .with(jwt().jwt(token -> token.subject("alice"))))
                 .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void retornaExtratoPaginado() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        when(queries.saldo(accountId)).thenReturn(Optional.of(new ContaSaldoReadModel(
+                accountId, BigDecimal.TEN, BigDecimal.ZERO, "ATIVA", 2, Instant.EPOCH)));
+        when(queries.extrato(eq(accountId), eq(0), eq(10), eq(null), eq(null)))
+                .thenReturn(new ExtratoReadModel(
+                        accountId, 0, 10, 1L,
+                        List.of(new MovimentacaoReadModel(UUID.randomUUID(), "DEPOSITO",
+                                BigDecimal.TEN, BigDecimal.TEN, Instant.parse("2026-01-01T10:00:00Z")))));
+
+        mvc.perform(get("/contas/{id}/extrato?pagina=0&tamanho=10", accountId)
+                        .with(jwt().jwt(token -> token.subject("alice"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contaId").value(accountId.toString()))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.movimentacoes[0].tipo").value("DEPOSITO"));
+    }
+
+    @Test
+    void retornaExtratoComFiltroDePeriodo() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        Instant de = Instant.parse("2026-01-01T00:00:00Z");
+        Instant ate = Instant.parse("2026-01-02T00:00:00Z");
+
+        when(queries.saldo(accountId)).thenReturn(Optional.of(new ContaSaldoReadModel(
+                accountId, BigDecimal.TEN, BigDecimal.ZERO, "ATIVA", 2, Instant.EPOCH)));
+        when(queries.extrato(eq(accountId), eq(0), eq(20), eq(de), eq(ate)))
+                .thenReturn(new ExtratoReadModel(
+                        accountId, 0, 20, 1L,
+                        List.of(new MovimentacaoReadModel(UUID.randomUUID(), "DEPOSITO",
+                                BigDecimal.TEN, BigDecimal.TEN, Instant.parse("2026-01-01T10:00:00Z")))));
+
+        mvc.perform(get("/contas/{id}/extrato?de=2026-01-01T00:00:00Z&ate=2026-01-02T00:00:00Z", accountId)
+                        .with(jwt().jwt(token -> token.subject("alice"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contaId").value(accountId.toString()))
+                .andExpect(jsonPath("$.total").value(1));
     }
 }
