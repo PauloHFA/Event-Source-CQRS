@@ -35,7 +35,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> {
-                    authorize.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
+                    authorize.requestMatchers("/actuator/health", "/actuator/health/**",
+                            "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
                     authorize.requestMatchers("/admin/**").hasAuthority("SCOPE_privacy:manage");
                     if (maintenanceMode) {
                         authorize.anyRequest().denyAll();

@@ -207,6 +207,51 @@ passaram sem falhas ou skips.
 - Módulo `api-command` (porta `8080`) mantido estritamente para comandos de escrita e histórico / time travel via Event Store.
 - Testes unitários com MockMvc e Spring Security validados em `api-query` (`ContaQueryControllerTest`).
 
+---
+
+## Fase Enterprise: Estabilização, DX e Cloud-Native (Etapas 10 a 14)
+
+### 10. Documentação interativa OpenAPI / Swagger UI (SpringDoc) — concluída
+- **Objetivo:** Expor documentação OpenAPI 3.0 e interface interativa Swagger UI em `api-command` (porta 8080) e `api-query` (porta 8081).
+- **Implementação e validação:**
+  - Dependência `springdoc-openapi-starter-webmvc-ui` adicionada aos dois módulos.
+  - OpenAPI configurado com `SecurityScheme` HTTP Bearer JWT e anotações semânticas (`@Tag`, `@Operation`) em todos os controllers (`ContaCommandController`, `TransferenciaController`, `ContaHistoricoController`, `PrivacyIntegrityAdminController` e `ContaQueryController`).
+  - Rotas `/v3/api-docs/**`, `/swagger-ui/**` e `/swagger-ui.html` liberadas em `SecurityConfig` para exploração interativa.
+  - Testes do reactor Maven validados.
+
+### 11. Stack completa de desenvolvimento local com Docker Compose — concluída
+- **Objetivo:** Permitir subir toda a infraestrutura com um único comando `docker compose up -d`.
+- **Implementação e validação:**
+  - `docker-compose.yml` criado orquestrando PostgreSQL 16 (com healthcheck), Redpanda (Kafka + Schema Registry), Prometheus, Grafana e Jaeger (OTLP trace receiver).
+  - Configurações de scrape do Prometheus para coletar métricas do Spring Boot Actuator (`api-command:8080` e `api-query:8081`).
+  - Datasource Prometheus pré-provisionado no Grafana.
+  - Documentação adicionada ao `README.md`.
+
+### 12. Read Model 100% Event-Driven via Kafka Consumer em `api-query` — concluída
+- **Objetivo:** Atualizar projeções de leitura de forma puramente event-driven com latência sub-segundo via consumidor Kafka.
+- **Implementação e validação:**
+  - Dependência `spring-kafka` adicionada ao módulo `api-query`.
+  - Componente `ContaKafkaConsumer` implementado consumindo o tópico `banco.conta.eventos.v1`.
+  - Atualização idempotente em tempo real de `rm_conta_saldo` e `rm_extrato` para eventos de abertura, depósitos, saques, limites diários, estornos e bloqueios.
+  - Teste unitário `ContaKafkaConsumerTest` validado.
+  - Ativação configurável via `banco.messaging.consumer.enabled: ${BANCO_MESSAGING_CONSUMER_ENABLED:false}`.
+
+### 13. Rate Limiting e Resiliência em endpoints de comando — concluída
+- **Objetivo:** Proteger operações financeiras críticas contra abusos, repetições acidentais e ataques DoS.
+- **Implementação e validação:**
+  - Componente `RateLimitingFilter` implementado com janela de contagem determinística por titular autenticado (`sub`) ou IP de origem.
+  - Alvo restrito a rotas de movimentação de fundos: `POST /contas/*/saques`, `POST /contas/*/depositos` e `POST /transferencias`.
+  - Configuração via propriedades `banco.rate-limiting.enabled`, `capacity` e `window-seconds`.
+  - Resposta RFC 7807 padronizada com status `429 Too Many Requests`, header `Retry-After` e código `TAXA_LIMITE_EXCEDIDA`.
+  - Testes unitários em `RateLimitingFilterTest` passando com 100% de sucesso.
+
+### 14. Cobertura de Testes Automatizada com Jacoco no CI — concluída
+- **Objetivo:** Mensurar e comprovar a cobertura de código de forma transparente no pipeline do GitHub Actions.
+- **Implementação e validação:**
+  - Plugin `jacoco-maven-plugin` (0.8.12) configurado no `pom.xml` raiz com metas `prepare-agent` e `report` ativas em todos os submódulos (`domain`, `application`, `infrastructure`, `api-command` e `api-query`).
+  - `.github/workflows/ci.yml` configurado para exportar relatórios HTML e XML do Jacoco (`**/target/site/jacoco/**`).
+  - Badges de CI, Java 21, Spring Boot, CQRS e OpenAPI adicionadas ao topo do `README.md`.
+
 ## Como atualizar este roadmap
 
 Ao concluir um item, registrar aqui o estado, decisões relevantes, evidências de

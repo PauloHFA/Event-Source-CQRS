@@ -4,6 +4,8 @@ import br.com.banco.application.Commands.Context;
 import br.com.banco.application.Commands.SolicitarTransferencia;
 import br.com.banco.application.TransferenciaResult;
 import br.com.banco.application.TransferenciaSaga;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import jakarta.validation.Valid;
@@ -18,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /** Transferência entre contas via saga. Com Idempotency-Key, o transferId é derivado da chave. */
+@Tag(name = "Transferências (Saga)", description = "Coordenação de transferências entre contas com débito, crédito e compensação")
 @RestController
 @RequestMapping("/transferencias")
 public class TransferenciaController {
@@ -32,6 +35,7 @@ public class TransferenciaController {
         this.ownership = ownership;
     }
 
+    @Operation(summary = "Solicitar transferência", description = "Inicia a saga de transferência debitando a origem e creditando o destino.")
     @PostMapping
     public ResponseEntity<TransferenciaResult> solicitar(
             @Valid @RequestBody TransferenciaRequest req,
@@ -47,6 +51,7 @@ public class TransferenciaController {
         return ResponseEntity.created(URI.create("/transferencias/" + transferId)).body(r);
     }
 
+    @Operation(summary = "Consultar status da transferência", description = "Retorna o estado atual da saga (INICIADA, DEBITADA, CONCLUIDA ou FALHA).")
     @GetMapping("/{id}")
     public TransferenciaResult consultar(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
         ownership.requireTransferOwner(id, jwt.getSubject());
