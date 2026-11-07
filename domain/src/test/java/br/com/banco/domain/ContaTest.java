@@ -63,12 +63,51 @@ class ContaTest {
     }
 
     @Test
+    void RN07_limiteDiarioConfiguradoRejeitaDebitosQueExcedemOTetoDoDia() {
+        var conta = Conta.reconstruir(List.of(aberta("0"), depositado("1000")));
+        conta.configurarLimiteDiario(bd("300.00"), clock);
+
+        // Primeiro saque de 200: permitido
+        conta.sacar(bd("200.00"), clock);
+        assertThat(conta.saldo()).isEqualByComparingTo("800.00");
+
+        // Segundo saque de 150 no mesmo dia: ultrapassaria 300 (200 + 150 = 350)
+        assertThatThrownBy(() -> conta.sacar(bd("150.00"), clock))
+                .isInstanceOf(LimiteDiarioExcedidoException.class);
+
+        // Saque de 100 restante: permitido
+        conta.sacar(bd("100.00"), clock);
+        assertThat(conta.saldo()).isEqualByComparingTo("700.00");
+
+        // No dia seguinte, limite é renovado
+        Clock clockDiaSeguinte = Clock.fixed(T.plusSeconds(86400), ZoneOffset.UTC);
+        conta.sacar(bd("250.00"), clockDiaSeguinte);
+        assertThat(conta.saldo()).isEqualByComparingTo("450.00");
+    }
+
+    @Test
+    void RN07_estornoAbateDoTotalDebitadoNoDia() {
+        var conta = Conta.reconstruir(List.of(aberta("0"), depositado("1000")));
+        conta.configurarLimiteDiario(bd("300.00"), clock);
+
+        conta.sacar(bd("300.00"), clock);
+
+        // Estorno da transferência de 100 no mesmo dia
+        conta.estornar(bd("100.00"), UUID.randomUUID(), clock);
+
+        // Agora pode sacar mais 100
+        conta.sacar(bd("100.00"), clock);
+        assertThat(conta.saldo()).isEqualByComparingTo("700.00");
+    }
+
+    @Test
     void valoresNaoPositivosSaoRejeitados() {
         var conta = Conta.reconstruir(List.of(aberta("0"), depositado("100")));
 
         assertThatThrownBy(() -> conta.depositar(bd("0"), "X", clock)).isInstanceOf(ValorInvalidoException.class);
         assertThatThrownBy(() -> conta.sacar(bd("-1"), clock)).isInstanceOf(ValorInvalidoException.class);
         assertThatThrownBy(() -> conta.depositar(null, "X", clock)).isInstanceOf(ValorInvalidoException.class);
+        assertThatThrownBy(() -> conta.configurarLimiteDiario(bd("-50"), clock)).isInstanceOf(ValorInvalidoException.class);
         assertThat(conta.eventosPendentes()).isEmpty();
     }
 
@@ -130,4 +169,3 @@ class ContaTest {
         assertThatThrownBy(() -> conta.depositar(bd("1"), "X", clock)).isInstanceOf(ContaInvalidaException.class);
     }
 }
-

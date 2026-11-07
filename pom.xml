@@ -14,6 +14,7 @@
         <module>application</module>
         <module>infrastructure</module>
         <module>api-command</module>
+        <module>api-query</module>
     </modules>
 
     <properties>

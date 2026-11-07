@@ -22,6 +22,11 @@ banco:
     enabled: ${BANCO_PROJECTIONS_ENABLED:true}
     batch-size: ${BANCO_PROJECTIONS_BATCH_SIZE:200}
     poll-interval: ${BANCO_PROJECTIONS_POLL_INTERVAL:1000}
+  transferencia:
+    recovery:
+      enabled: ${BANCO_TRANSFERENCIA_RECOVERY_ENABLED:true}
+      timeout-seconds: ${BANCO_TRANSFERENCIA_RECOVERY_TIMEOUT_SECONDS:300}
+      poll-interval: ${BANCO_TRANSFERENCIA_RECOVERY_POLL_INTERVAL:60000}
 management:
   endpoints:
     web:

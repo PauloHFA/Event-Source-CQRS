@@ -2,6 +2,7 @@ package br.com.banco.api.command;
 
 import br.com.banco.application.ContaJaExisteException;
 import br.com.banco.application.port.ConcurrencyException;
+import br.com.banco.domain.LimiteDiarioExcedidoException;
 import br.com.banco.domain.SaldoInsuficienteException;
 import br.com.banco.domain.ValorInvalidoException;
 import jakarta.validation.ConstraintViolationException;
@@ -28,6 +29,8 @@ class ApiExceptionHandlerTest {
                 HttpStatus.CONFLICT, "CONTA_JA_EXISTE");
         assertProblem(handler.regraDeNegocio(new SaldoInsuficienteException(UUID.randomUUID())),
                 HttpStatus.UNPROCESSABLE_ENTITY, "SALDO_INSUFICIENTE");
+        assertProblem(handler.regraDeNegocio(new LimiteDiarioExcedidoException(UUID.randomUUID(), BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "LIMITE_DIARIO_EXCEDIDO");
         assertProblem(handler.conflito(new ConcurrencyException("conta-1", 2)),
                 HttpStatus.CONFLICT, "CONFLITO_DE_CONCORRENCIA");
         assertProblem(handler.parametroInvalido(new ConstraintViolationException("invalid", Set.of())),
