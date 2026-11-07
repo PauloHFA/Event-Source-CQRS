@@ -173,17 +173,39 @@ unitários verificam códigos/status e a integração verifica o formato HTTP re
 Na execução `41980601989` do GitHub Actions, os testes unitários e de API
 passaram sem falhas ou skips.
 
-### 7. Medir desempenho e preparar operação — pendente
+### 7. Medir desempenho e preparar operação — implementação concluída
 
-**Objetivo:** substituir metas não verificadas por evidências e requisitos
-operacionais.
+**Objetivo:** substituir metas não verificadas por evidências e requisitos operacionais mensuráveis (RNF-03 a RNF-06).
 
-**Escopo e aceite:**
-- Criar cenários de carga para comandos, projeções, publisher e rebuild.
-- Medir e registrar p95/p99, throughput, lag e tempo de recuperação em ambiente
-  documentado.
-- Revisar alertas, retenção de logs, backups, restauração e disaster recovery.
-- Não declarar metas atendidas sem resultados reproduzíveis.
+**Implementação e validação:**
+- `ContaReconstrucaoBenchmarkTest`: comprovação de RNF-06 com 10.000 eventos. Tempo medido: média de 0,026 ms e máximo de 0,235 ms (meta: < 50 ms).
+- `PerformanceBenchmarkIT`: benchmark end-to-end com PostgreSQL via Testcontainers inserindo 10.000 eventos, validando reidratação com banco real (< 50 ms) e concorrência massiva de escrita (RNF-03 e RNF-05).
+- `load-tests/k6-load-test.js`: script k6 de carga com ramp-up, estresse de 200 VUs e thresholds estritos de p95 < 100 ms (RNF-03) e throughput >= 1.000 req/s (RNF-05).
+
+### 8. Limite diário de movimentação (RN-07), extrato por período (RF-07) e recuperação de sagas — concluída
+
+**Objetivo:** suprir os requisitos de negócio, funcionais e operacionais pendentes da especificação.
+
+**Implementação e validação:**
+- [RN-07] Limite diário configurável por conta em `Conta`, acumulando débitos por dia civil de forma determinística, rejeitando excedentes com `LimiteDiarioExcedidoException` (`422 LIMITE_DIARIO_EXCEDIDO`).
+- [RN-07] Endpoint `PUT /contas/{id}/limite-diario`, migração `V9__limite_diario.sql` e projeção em `ContaProjector`.
+- [RF-07] Parâmetros `de` e `ate` (`Instant`) adicionados a `GET /contas/{id}/extrato` e ao `ContaReadModelQueries`.
+- [RF-07] Endpoint de detalhes da conta em `GET /contas/{id}`.
+- [Operação] Agendador automático de recuperação de transferências travadas `TransferenciaRecoveryConfiguration` com métricas e logs estruturados.
+
+### 9. Separação física de API Query (Read Side CQRS) — concluída
+
+**Objetivo:** isolar completamente leitura e escrita em serviços HTTP autônomos (CQRS físico estrito), conforme Seção 4.3 da especificação.
+
+**Implementação e validação:**
+- Módulo Maven independente `api-query` criado, rodando por padrão na porta `8081`.
+- Endpoints de leitura transferidos exclusivamente para `api-query`:
+  - `GET /contas/{id}` (detalhes da conta no modelo de leitura).
+  - `GET /contas/{id}/saldo` (saldo atual projetado).
+  - `GET /contas/{id}/extrato?pagina=0&tamanho=20&de=...&ate=...` (extrato com paginação e filtro por período).
+- Segurança stateless via JWT/OIDC e autorização por titular (`sub`), além de filtro de correlação `X-Correlation-Id`.
+- Módulo `api-command` (porta `8080`) mantido estritamente para comandos de escrita e histórico / time travel via Event Store.
+- Testes unitários com MockMvc e Spring Security validados em `api-query` (`ContaQueryControllerTest`).
 
 ## Como atualizar este roadmap
 

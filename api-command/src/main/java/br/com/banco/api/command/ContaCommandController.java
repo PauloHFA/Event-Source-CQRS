@@ -28,6 +28,7 @@ import java.util.UUID;
 public class ContaCommandController {
 
     record AbrirContaRequest(@NotNull @PositiveOrZero BigDecimal limite) {}
+    record ConfigurarLimiteDiarioRequest(@NotNull @PositiveOrZero BigDecimal limiteDiario) {}
     record DepositoRequest(@NotNull @Positive BigDecimal valor, @NotBlank String origem) {}
     record SaqueRequest(@NotNull @Positive BigDecimal valor) {}
     record BloqueioRequest(@NotBlank String motivo) {}
@@ -49,6 +50,18 @@ public class ContaCommandController {
         var r = handler.handle(new AbrirConta(contaId, jwt.getSubject(), req.limite(),
                 ctx(key, correlationId, jwt.getSubject(), "abrir-conta")));
         return ResponseEntity.created(URI.create("/contas/" + r.contaId())).body(r);
+    }
+
+    @PutMapping("/{id}/limite-diario")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public CommandResult configurarLimiteDiario(@PathVariable UUID id,
+                                                @Valid @RequestBody ConfigurarLimiteDiarioRequest req,
+                                                @RequestHeader(value = "Idempotency-Key", required = false) String key,
+                                                @RequestHeader(value = "X-Correlation-Id", required = false) UUID correlationId,
+                                                @AuthenticationPrincipal Jwt jwt) {
+        ownership.requireOwner(id, jwt.getSubject());
+        return handler.handle(new ConfigurarLimiteDiario(id, req.limiteDiario(),
+                ctx(key, correlationId, jwt.getSubject(), "limite-diario:" + id)));
     }
 
     @PostMapping("/{id}/depositos")

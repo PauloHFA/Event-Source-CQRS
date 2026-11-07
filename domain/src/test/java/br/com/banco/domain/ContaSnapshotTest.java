@@ -20,6 +20,7 @@ class ContaSnapshotTest {
         UUID id = UUID.randomUUID();
         List<ContaEvent> historico = new ArrayList<>();
         historico.add(new ContaAberta(UUID.randomUUID(), id, "t", new BigDecimal("100"), T));
+        historico.add(new LimiteDiarioConfigurado(UUID.randomUUID(), id, new BigDecimal("500"), T));
         for (int i = 1; i <= 20; i++) {
             historico.add(i % 3 == 0
                     ? new ValorSacado(UUID.randomUUID(), id, new BigDecimal("7.25"), T)
@@ -38,8 +39,8 @@ class ContaSnapshotTest {
 
     @Test
     void snapshotDeOutraVersaoDeEsquemaEhIncompativel() {
-        var antigo = new ContaSnapshot(0, UUID.randomUUID(), BigDecimal.ZERO, BigDecimal.ZERO, Conta.Status.ATIVA, 1);
+        var antigo = new ContaSnapshot(1, UUID.randomUUID(), BigDecimal.ZERO, BigDecimal.ZERO,
+                Conta.Status.ATIVA, 1, null, null, null);
         assertThat(antigo.compativel()).isFalse();
     }
 }
-

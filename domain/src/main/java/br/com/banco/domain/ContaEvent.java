@@ -33,4 +33,8 @@ public sealed interface ContaEvent extends DomainEvent {
     /** Evento compensatório: devolve à conta de origem o valor de uma transferência que falhou. */
     record ValorEstornado(UUID eventId, UUID contaId, BigDecimal valor, UUID transferenciaId,
                           Instant em) implements ContaEvent {}
+
+    /** RN-07: Limite diário de saque/transferência configurável por conta. */
+    record LimiteDiarioConfigurado(UUID eventId, UUID contaId, BigDecimal novoLimite,
+                                   Instant em) implements ContaEvent {}
 }

@@ -50,38 +50,48 @@ tenham sido medidas ou comprovadas.
 ## Arquitetura e módulos
 
 ```text
-Cliente
-  |
-  v
-api-command (Spring Boot / REST)
-  |
-  v
-application (handlers, idempotência, saga, portas)
-  |
-  v
-domain (Conta, Transferencia, eventos e regras)
-  |
-  v
-infrastructure
-  ├── Event Store e snapshots (PostgreSQL)
-  ├── projeções de saldo/extrato (PostgreSQL)
-  ├── publicação de eventos (Kafka + Schema Registry)
-  ├── criptografia de dados pessoais
-  └── verificação da cadeia de integridade
+               Cliente
+               /     \
+   (Write Side)       (Read Side)
+        |                  |
+        v                  v
+   api-command         api-query
+   (Porta 8080)       (Porta 8081)
+        |                  |
+        v                  |
+   application             |
+        |                  |
+        v                  |
+      domain               |
+        |                  |
+        +--------+---------+
+                 |
+                 v
+           infrastructure
+   ├── Event Store e snapshots (PostgreSQL)
+   ├── Read Models (rm_conta_saldo, rm_extrato)
+   ├── Projeções assíncronas (Background Runner)
+   ├── Publicação de eventos (Kafka + Schema Registry)
+   ├── Criptografia de dados pessoais (AES-GCM / Crypto-shredding)
+   └── Verificação da cadeia de integridade SHA-256
 ```
 
-- **`domain/`** — agregados e regras de negócio em Java, sem dependência de
+- **`domain/`** — agregados e regras de negócio em Java puro (21), sem dependência de
   Spring, JDBC, Jackson ou Kafka.
-- **`application/`** — comandos, handlers, saga, serviços de histórico e
-  interfaces (portas) para persistência e unidade de trabalho.
-- **`infrastructure/`** — adapters PostgreSQL/JDBC, migrations Flyway, projeções,
-  snapshots, publisher, serialização e criptografia.
-- **`api-command/`** — aplicação Spring Boot com endpoints de comando,
-  consulta, transferência e reconstrução histórica.
+- **`application/`** — comandos, handlers, saga de transferência, serviços de histórico
+  e portas para persistência e unidade de trabalho.
+- **`infrastructure/`** — persistência JDBC, migrations Flyway, projeções assíncronas,
+  snapshots, publisher Kafka, serialização e criptografia envelopada.
+- **`api-command/`** — aplicação Spring Boot (porta 8080) expondo comandos REST de escrita
+  (abertura, depósito, saque, limite diário, bloqueio, encerramento, transferência) e
+  reconstrução histórica (time travel via Event Store).
+- **`api-query/`** — aplicação Spring Boot (porta 8081) expondo endpoints REST de consulta
+  otimizada aos read models (`GET /contas/{id}`, `GET /contas/{id}/saldo`, `GET /contas/{id}/extrato`).
 
-O read model de saldo e extrato é atualizado continuamente pelo agendador da
-projeção e consultado pela API. As consultas usam somente as tabelas projetadas;
-o endpoint de estado histórico continua reconstruindo o agregado do Event Store.
+O read model de saldo e extrato é atualizado continuamente pelo runner assíncrono da
+projeção e consultado pela `api-query`. As consultas consom exclusivamente as tabelas
+projetadas (`rm_conta_saldo` e `rm_extrato`); o endpoint de estado histórico em `api-command`
+reconstrói o agregado diretamente do Event Store.
 
 ## Fluxos principais
 
@@ -230,19 +240,22 @@ Use o valor gerado na sessão do terminal para iniciar a aplicação. A chave n�
 deve ser regenerada entre reinicializações se o banco contiver dados cifrados:
 uma chave diferente impedirá a abertura das chaves de dados existentes.
 
-### 3. Executar a API
+### 3. Executar as APIs
 
-Na raiz do repositório:
+Na raiz do repositório, inicie os serviços de escrita e leitura em terminais separados:
 
 ```powershell
+# Terminal 1 - API de Escrita / Comandos (porta 8080)
 mvn -pl api-command -am spring-boot:run
+
+# Terminal 2 - API de Leitura / Consultas (porta 8081)
+mvn -pl api-query -am spring-boot:run
 ```
 
-A aplicação usa `http://localhost:8080` por padrão. O Flyway aplica as migrations
-ao iniciar. A conexão PostgreSQL padrão é `jdbc:postgresql://localhost:5432/banco`
-com usuário e senha `banco`, configuráveis pelas variáveis descritas abaixo.
-Configure `OIDC_ISSUER_URI` com o issuer do seu provedor antes de iniciar; sem
-essa configuração a autenticação JWT não pode ser validada.
+A `api-command` roda em `http://localhost:8080` e executa as migrations Flyway ao iniciar.
+A `api-query` roda em `http://localhost:8081` consultando os read models projetados.
+A conexão PostgreSQL padrão é `jdbc:postgresql://localhost:5432/banco` com usuário e senha `banco`, configuráveis pelas variáveis descritas abaixo.
+Configure `OIDC_ISSUER_URI` com o issuer do seu provedor antes de iniciar; sem essa configuração a autenticação JWT não pode ser validada.
 
 ## Configuração
 
@@ -256,6 +269,9 @@ essa configuração a autenticação JWT não pode ser validada.
 | `BANCO_MAINTENANCE_ENABLED` | `false` | Quando `true`, bloqueia rotas não administrativas para permitir uma rotação em janela de manutenção. |
 | `OIDC_ISSUER_URI` | — | Issuer OIDC usado para validar assinatura, emissor e validade do JWT. |
 | `banco.snapshot.interval` | `100` | Intervalo de versões para criação de snapshot. |
+| `BANCO_TRANSFERENCIA_RECOVERY_ENABLED` | `true` | Ativa a recuperação agendada automática de sagas de transferência travadas. |
+| `BANCO_TRANSFERENCIA_RECOVERY_TIMEOUT_SECONDS` | `300` s | Tempo de inatividade mínimo para considerar uma etapa da saga como travada. |
+| `BANCO_TRANSFERENCIA_RECOVERY_POLL_INTERVAL` | `60000` ms | Intervalo entre execuções do ciclo de recuperação da saga. |
 | `BANCO_PROJECTIONS_ENABLED` | `true` | Ativa o processamento agendado das projeções. |
 | `BANCO_PROJECTIONS_BATCH_SIZE` | `200` | Máximo de eventos lidos por lote de projeção. |
 | `BANCO_PROJECTIONS_POLL_INTERVAL` | `1000` ms | Atraso fixo entre lotes de projeção. |
@@ -339,6 +355,21 @@ Content-Type: application/json
 
 Retorna `202 Accepted` quando o comando é aceito.
 
+### Configurar limite diário (RN-07)
+
+```http
+PUT /contas/{id}/limite-diario
+Authorization: Bearer <access-token>
+Idempotency-Key: limite-001
+Content-Type: application/json
+
+{
+  "limiteDiario": 500.00
+}
+```
+
+Retorna `202 Accepted`. Operações de débito no mesmo dia civil que excederem o valor acumulado configurado são rejeitadas com `422 LIMITE_DIARIO_EXCEDIDO`.
+
 ### Bloquear, desbloquear e encerrar
 
 - `POST /contas/{id}/bloqueio` com `{"motivo":"solicitação"}` bloqueia.
@@ -378,17 +409,28 @@ GET /contas/{id}/historico/estado?em=2026-01-15T10:00:00Z
 O endpoint reconstitui o agregado dos eventos e devolve um snapshot do estado
 daquela versão ou instante.
 
-### Consultar saldo e extrato projetados
+### Consultar detalhes, saldo e extrato projetados (api-query - porta 8081)
+
+Os endpoints do Read Side rodam na `api-query` (porta 8081) e leem diretamente dos Read Models PostgreSQL:
 
 ```http
-GET /contas/{id}/saldo
-GET /contas/{id}/extrato?pagina=0&tamanho=20
+# Detalhes completos da conta
+GET http://localhost:8081/contas/{id}
+Authorization: Bearer <access-token>
+
+# Saldo atual
+GET http://localhost:8081/contas/{id}/saldo
+Authorization: Bearer <access-token>
+
+# Extrato paginado com filtro opcional por período (RF-07)
+GET http://localhost:8081/contas/{id}/extrato?pagina=0&tamanho=20&de=2026-01-01T00:00:00Z&ate=2026-01-31T23:59:59Z
+Authorization: Bearer <access-token>
 ```
 
-O extrato usa páginas começando em zero, tamanho padrão 20 e máximo 100. A
+O extrato usa páginas começando em zero, tamanho padrão 20 e máximo 100. Os parâmetros `de` e `ate` são opcionais (formato ISO-8601). A
 ordenação é da movimentação mais recente para a mais antiga, com desempate
 estável por identificador interno. Saldo e extrato são lidos dos read models
-PostgreSQL e podem apresentar atraso em relação aos comandos.
+PostgreSQL e convergem de forma assíncrona em relação aos comandos.
 
 ### Erros
 

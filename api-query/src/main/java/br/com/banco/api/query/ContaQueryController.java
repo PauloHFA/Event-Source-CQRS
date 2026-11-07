@@ -1,4 +1,4 @@
-package br.com.banco.api.command;
+package br.com.banco.api.query;
 
 import br.com.banco.infrastructure.projections.ContaReadModelQueries;
 import br.com.banco.infrastructure.projections.ContaSaldoReadModel;
@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +32,16 @@ public class ContaQueryController {
         this.ownership = ownership;
     }
 
+    /** RF-07: Consulta detalhes da conta no modelo de leitura. */
+    @GetMapping
+    public ContaSaldoReadModel detalhes(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        ownership.requireOwner(id, jwt.getSubject());
+        return queries.saldo(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Conta ainda não projetada; tente novamente."));
+    }
+
+    /** RF-07: Consulta saldo atual no modelo de leitura. */
     @GetMapping("/saldo")
     public ContaSaldoReadModel saldo(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
         ownership.requireOwner(id, jwt.getSubject());
@@ -39,16 +50,19 @@ public class ContaQueryController {
                         "Saldo ainda não projetado; tente novamente."));
     }
 
+    /** RF-07: Extrato paginado com filtro opcional por período (de / ate). */
     @GetMapping("/extrato")
     public ExtratoReadModel extrato(@PathVariable UUID id,
                                     @RequestParam(defaultValue = "0") @Min(0) int pagina,
                                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int tamanho,
+                                    @RequestParam(required = false) Instant de,
+                                    @RequestParam(required = false) Instant ate,
                                     @AuthenticationPrincipal Jwt jwt) {
         ownership.requireOwner(id, jwt.getSubject());
         if (queries.saldo(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Extrato ainda não projetado; tente novamente.");
         }
-        return queries.extrato(id, pagina, tamanho);
+        return queries.extrato(id, pagina, tamanho, de, ate);
     }
 }

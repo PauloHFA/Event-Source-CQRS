@@ -5,6 +5,7 @@ import br.com.banco.application.port.ConcurrencyException;
 import br.com.banco.domain.ContaBloqueadaException;
 import br.com.banco.domain.ContaInvalidaException;
 import br.com.banco.domain.DomainException;
+import br.com.banco.domain.LimiteDiarioExcedidoException;
 import br.com.banco.domain.SaldoInsuficienteException;
 import br.com.banco.domain.SaldoNaoZeradoException;
 import br.com.banco.domain.TransferenciaEstadoInvalidaException;
@@ -78,6 +79,7 @@ public class ApiExceptionHandler {
 
     private static String codigoRegra(DomainException e) {
         if (e instanceof SaldoInsuficienteException) return "SALDO_INSUFICIENTE";
+        if (e instanceof LimiteDiarioExcedidoException) return "LIMITE_DIARIO_EXCEDIDO";
         if (e instanceof ContaBloqueadaException) return "CONTA_BLOQUEADA";
         if (e instanceof ContaInvalidaException) return "CONTA_INVALIDA";
         if (e instanceof SaldoNaoZeradoException) return "SALDO_NAO_ZERADO";

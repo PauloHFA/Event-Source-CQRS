@@ -145,6 +145,17 @@ class ContaCommandHandlerTest {
     }
 
     @Test
+    void configurarLimiteDiarioLimitaSaquesNoHandler() {
+        handler.handle(new ConfigurarLimiteDiario(id, new BigDecimal("100.00"), ctx(null)));
+        handler.handle(new DepositarValor(id, new BigDecimal("500.00"), "X", ctx(null)));
+
+        handler.handle(new SacarValor(id, new BigDecimal("60.00"), ctx(null)));
+
+        assertThatThrownBy(() -> handler.handle(new SacarValor(id, new BigDecimal("50.00"), ctx(null))))
+                .isInstanceOf(LimiteDiarioExcedidoException.class);
+    }
+
+    @Test
     void contaInexistenteRejeitaComandos() {
         assertThatThrownBy(() -> handler.handle(new DepositarValor(UUID.randomUUID(), BigDecimal.ONE, "X", ctx(null))))
                 .isInstanceOf(ContaInvalidaException.class);

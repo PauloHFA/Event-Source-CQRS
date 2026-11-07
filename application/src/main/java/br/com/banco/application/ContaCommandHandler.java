@@ -57,6 +57,10 @@ public class ContaCommandHandler {
                 () -> Conta.abrir(cmd.contaId(), cmd.titularRef(), cmd.limite(), clock));
     }
 
+    public CommandResult handle(ConfigurarLimiteDiario cmd) {
+        return executar(cmd.contaId(), cmd.ctx(), c -> c.configurarLimiteDiario(cmd.novoLimite(), clock));
+    }
+
     public CommandResult handle(DepositarValor cmd) {
         return executar(cmd.contaId(), cmd.ctx(), c -> c.depositar(cmd.valor(), cmd.origem(), clock));
     }
