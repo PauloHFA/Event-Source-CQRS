@@ -8,7 +8,7 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/banco}
     username: ${SPRING_DATASOURCE_USERNAME:banco}
-    password: ${SPRING_DATASOURCE_PASSWORD:banco}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -20,7 +20,7 @@ spring:
 
 banco:
   crypto:
-    master-key: ${BANCO_CRYPTO_MASTER_KEY:k+tV8WfUe3xG/jR9mQbY1Z8vN2pL5wXy3d6aB8cE0gI=}
+    master-key: ${BANCO_CRYPTO_MASTER_KEY:}
 
 management:
   endpoints:
