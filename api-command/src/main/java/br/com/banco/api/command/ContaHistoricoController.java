@@ -2,6 +2,8 @@ package br.com.banco.api.command;
 
 import br.com.banco.application.ContaHistoricoService;
 import br.com.banco.domain.ContaSnapshot;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
@@ -16,6 +18,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /** Time travel (RF-08): reconstrói a conta a partir dos eventos (fonte da verdade), não do read model. */
+@Tag(name = "Time Travel (Histórico)", description = "Reconstrução determinística do agregado a partir do Event Store")
 @RestController
 @RequestMapping("/contas/{id}/historico")
 public class ContaHistoricoController {
@@ -28,7 +31,7 @@ public class ContaHistoricoController {
         this.ownership = ownership;
     }
 
-    /** {@code ?em=2026-01-15T10:00:00Z} ou {@code ?versao=12}. */
+    @Operation(summary = "Consultar estado histórico da conta", description = "Reconstitui o agregado diretamente dos eventos no instante (?em=...) ou na versão (?versao=...).")
     @GetMapping("/estado")
     public ContaSnapshot estado(@PathVariable UUID id,
                                 @RequestParam(required = false) Instant em,

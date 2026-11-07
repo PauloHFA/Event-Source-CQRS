@@ -1,6 +1,12 @@
 # Event Sourcing + CQRS — Sistema Bancário
 
-Implementação didática de um núcleo bancário em Java, construído para demonstrar
+[![CI](https://github.com/PauloHFA/Event-Source-CQRS/actions/workflows/ci.yml/badge.svg)](https://github.com/PauloHFA/Event-Source-CQRS/actions/workflows/ci.yml)
+![Java 21](https://img.shields.io/badge/Java-21-orange.svg)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen.svg)
+![Architecture](https://img.shields.io/badge/Architecture-Event%20Sourcing%20%2B%20CQRS-blue.svg)
+![OpenAPI 3.0](https://img.shields.io/badge/OpenAPI-3.0%20(Swagger)-green.svg)
+
+Implementação didática e de referência de um núcleo bancário em Java puro (21), construído para demonstrar
 Event Sourcing e CQRS sem um framework de Event Store. O histórico de domínio é
 a fonte da verdade: comandos produzem eventos append-only, e o estado de uma
 conta pode ser reconstituído a partir desses eventos.
@@ -203,17 +209,19 @@ de produção: o SQL acima é um padrão para os serviços consumidores.
 
 ## Executar localmente
 
-### 1. Iniciar PostgreSQL
+### 1. Iniciar a infraestrutura completa (Docker Compose)
 
-Com Docker, um banco local para desenvolvimento pode ser iniciado assim:
+O repositório fornece um `docker-compose.yml` que sobe toda a infraestrutura necessária:
+- **PostgreSQL 16**: `localhost:5432`
+- **Redpanda (Kafka + Schema Registry)**: Kafka em `localhost:9092` e Schema Registry em `localhost:8085`
+- **Jaeger (Tracing OTLP)**: UI em `http://localhost:16686` e coletor OTLP HTTP em `localhost:4318`
+- **Prometheus**: `http://localhost:9090`
+- **Grafana**: `http://localhost:3000` (usuário: `admin` / senha: `admin`)
+
+Para iniciar todos os containers:
 
 ```powershell
-docker run --name banco-es-postgres `
-  -e POSTGRES_DB=banco `
-  -e POSTGRES_USER=banco `
-  -e POSTGRES_PASSWORD=banco `
-  -p 5432:5432 `
-  -d postgres:16-alpine
+docker compose up -d
 ```
 
 O usuário configurado precisa ter permissão para executar as migrations Flyway.
@@ -256,6 +264,12 @@ A `api-command` roda em `http://localhost:8080` e executa as migrations Flyway a
 A `api-query` roda em `http://localhost:8081` consultando os read models projetados.
 A conexão PostgreSQL padrão é `jdbc:postgresql://localhost:5432/banco` com usuário e senha `banco`, configuráveis pelas variáveis descritas abaixo.
 Configure `OIDC_ISSUER_URI` com o issuer do seu provedor antes de iniciar; sem essa configuração a autenticação JWT não pode ser validada.
+
+### Documentação Swagger UI (OpenAPI 3.0)
+
+Com as APIs em execução, acesse a documentação interativa com suporte a Bearer JWT:
+- **Command API (Escrita - porta 8080):** `http://localhost:8080/swagger-ui.html`
+- **Query API (Leitura - porta 8081):** `http://localhost:8081/swagger-ui.html`
 
 ## Configuração
 
