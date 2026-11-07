@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: banco
       POSTGRES_USER: banco
-      POSTGRES_PASSWORD: banco
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
@@ -60,8 +60,8 @@ services:
     image: grafana/grafana:10.4.2
     container_name: banco-grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
